@@ -1,0 +1,64 @@
+import React, { useState } from "react";
+import { Box } from "@mui/material";
+import Navbar from "./Navbar";
+import Sidebar from "./Sidebar";
+import Dashboard from "../Dashboard/Dashboard";
+import PatientManagement from "../Patient/PatientManagement";
+import DoctorManagement from "../Doctor/DoctorManagement";
+import AppointmentManagement from "../Appointment/AppointmentManagement";
+import LabManagement from "../Lab/LabManagement";
+import PharmacyManagement from "../Pharmacy/PharmacyManagement";
+import BillingManagement from "../Billing/BillingManagement";
+import OCRTools from "../OCR/OCRTools";
+import Analytics from "../Analytics/Analytics";
+import InventoryManagement from "../Inventory/InventoryManagement";
+import EmergencyManagement from "../Emergency/EmergencyManagement";
+import { Routes, Route } from "react-router-dom";
+
+// src/components/Layout/AppLayout.tsx
+export default function AppLayout() {
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+
+  return (
+    <Box sx={{ display: "flex", minHeight: "100vh", backgroundColor: "#f8fafc" }}>
+      <Navbar onSidebarToggle={() => setSidebarOpen(!sidebarOpen)} />
+      
+      <Sidebar 
+        open={sidebarOpen} 
+        onToggle={() => setSidebarOpen(!sidebarOpen)}
+      />
+
+      <Box
+        component="main"
+        sx={{
+          flexGrow: 1,
+          p: { xs: 2, md: 3 },
+          mt: { xs: 8, md: 9 },
+          ml: sidebarOpen ? "240px" : "72px",
+          transition: "margin-left 0.3s ease",
+          overflow: "auto",
+        }}
+      >
+        {/* ✅ FIXED ROUTES - Match sidebar paths */}
+        <Routes>
+          <Route index element={<Dashboard />} />              {/* /app/ */}
+          <Route path="dashboard" element={<Dashboard />} />   {/* /app/dashboard */}
+          <Route path="patients/*" element={<PatientManagement />} />
+          <Route path="doctors/*" element={<DoctorManagement />} />
+          <Route path="appointments/*" element={<AppointmentManagement />} />
+          <Route path="lab/*" element={<LabManagement />} />
+          <Route path="pharmacy/*" element={<PharmacyManagement />} />
+          <Route path="billing/*" element={<BillingManagement />} />
+          <Route path="ocr/*" element={<OCRTools />} />
+          <Route path="analytics" element={<Analytics />} />
+          <Route path="inventory/*" element={<InventoryManagement />} />
+          <Route path="emergency/*" element={<EmergencyManagement />} />
+          
+          {/* Fallback for unmatched routes */}
+          <Route path="*" element={<Dashboard />} />
+        </Routes>
+      </Box>
+    </Box>
+  );
+}
+

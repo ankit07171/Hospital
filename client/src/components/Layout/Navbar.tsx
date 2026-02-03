@@ -9,6 +9,7 @@ import {
   Avatar,
   Menu,
   MenuItem,
+  Divider,
 } from '@mui/material';
 import {
   Menu as MenuIcon,
@@ -16,6 +17,7 @@ import {
   AccountCircle,
   LocalHospital,
 } from '@mui/icons-material';
+import { useNavigate } from 'react-router-dom';
 
 interface NavbarProps {
   onSidebarToggle: () => void;
@@ -23,6 +25,7 @@ interface NavbarProps {
 
 const Navbar: React.FC<NavbarProps> = ({ onSidebarToggle }) => {
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
+  const navigate = useNavigate();
 
   const handleProfileMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
@@ -30,6 +33,15 @@ const Navbar: React.FC<NavbarProps> = ({ onSidebarToggle }) => {
 
   const handleMenuClose = () => {
     setAnchorEl(null);
+  };
+
+  const handleLogout = () => {
+    // Clear localStorage
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    
+    // Navigate to home page (/)
+    navigate('/', { replace: true });
   };
 
   return (
@@ -94,7 +106,18 @@ const Navbar: React.FC<NavbarProps> = ({ onSidebarToggle }) => {
         >
           <MenuItem onClick={handleMenuClose}>Profile</MenuItem>
           <MenuItem onClick={handleMenuClose}>Settings</MenuItem>
-          <MenuItem onClick={handleMenuClose}>Logout</MenuItem>
+          <Divider />
+          <MenuItem 
+            onClick={handleLogout}
+            sx={{ 
+              color: 'error.main',
+              '&:hover': {
+                backgroundColor: 'error.50'
+              }
+            }}
+          >
+            Logout
+          </MenuItem>
         </Menu>
       </Toolbar>
     </AppBar>

@@ -30,18 +30,33 @@ interface SidebarProps {
   onToggle: () => void;
 }
 
+// const menuItems = [
+//   { text: 'Dashboard', icon: <Dashboard />, path: '/' },
+//   { text: 'Patients', icon: <People />, path: '/patients' },
+//   { text: 'Doctors', icon: <LocalHospital />, path: '/doctors' },
+//   { text: 'Appointments', icon: <EventNote />, path: '/appointments' },
+//   { text: 'Laboratory', icon: <Science />, path: '/lab' },
+//   { text: 'Pharmacy', icon: <LocalPharmacy />, path: '/pharmacy' },
+//   { text: 'Billing', icon: <Receipt />, path: '/billing' },
+//   { text: 'OCR Tools', icon: <CameraAlt />, path: '/ocr' },
+//   { text: 'Analytics', icon: <Analytics />, path: '/analytics' },
+//   { text: 'Inventory', icon: <Inventory />, path: '/inventory' },
+//   { text: 'Emergency', icon: <Emergency />, path: '/emergency' },
+// ];
+
+// src/components/Layout/Sidebar.tsx
 const menuItems = [
-  { text: 'Dashboard', icon: <Dashboard />, path: '/' },
-  { text: 'Patients', icon: <People />, path: '/patients' },
-  { text: 'Doctors', icon: <LocalHospital />, path: '/doctors' },
-  { text: 'Appointments', icon: <EventNote />, path: '/appointments' },
-  { text: 'Laboratory', icon: <Science />, path: '/lab' },
-  { text: 'Pharmacy', icon: <LocalPharmacy />, path: '/pharmacy' },
-  { text: 'Billing', icon: <Receipt />, path: '/billing' },
-  { text: 'OCR Tools', icon: <CameraAlt />, path: '/ocr' },
-  { text: 'Analytics', icon: <Analytics />, path: '/analytics' },
-  { text: 'Inventory', icon: <Inventory />, path: '/inventory' },
-  { text: 'Emergency', icon: <Emergency />, path: '/emergency' },
+  { text: 'Dashboard', icon: <Dashboard />, path: '/app/dashboard' },  // ✅ Fixed
+  { text: 'Patients', icon: <People />, path: '/app/patients' },       // ✅ Fixed
+  { text: 'Doctors', icon: <LocalHospital />, path: '/app/doctors' },  // ✅ Fixed
+  { text: 'Appointments', icon: <EventNote />, path: '/app/appointments' },
+  { text: 'Laboratory', icon: <Science />, path: '/app/lab' },
+  { text: 'Pharmacy', icon: <LocalPharmacy />, path: '/app/pharmacy' },
+  { text: 'Billing', icon: <Receipt />, path: '/app/billing' },
+  { text: 'OCR Tools', icon: <CameraAlt />, path: '/app/ocr' },
+  { text: 'Analytics', icon: <Analytics />, path: '/app/analytics' },
+  { text: 'Inventory', icon: <Inventory />, path: '/app/inventory' },
+  { text: 'Emergency', icon: <Emergency />, path: '/app/emergency' },
 ];
 
 const Sidebar: React.FC<SidebarProps> = ({ open, onToggle }) => {

@@ -1,47 +1,14 @@
-import React, { useState, useEffect } from 'react';
-import { Routes, Route } from 'react-router-dom';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { Routes, Route, useNavigate, useParams } from 'react-router-dom';
 import {
-  Box,
-  Card,
-  CardContent,
-  Typography,
-  Button,
-  TextField,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Paper,
-  Chip,
-  IconButton,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Avatar,
-  Pagination,
-  InputAdornment,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
+  Box, Card, CardContent, Typography, Button, TextField, Table, TableBody,
+  TableCell, TableContainer, TableHead, TableRow, Paper, Chip, IconButton,
+  Pagination, InputAdornment, FormControl, InputLabel, Select, MenuItem, 
+  FormHelperText
 } from '@mui/material';
-import {
-  Add,
-  Search,
-  Edit,
-  Visibility,
-  EventNote,
-  Person,
-  LocalHospital,
-  AccessTime,
-  Cancel,
-  CheckCircle,
-} from '@mui/icons-material';
+import { Add, Search, Edit, Visibility } from '@mui/icons-material';
 import { format } from 'date-fns';
-import axios from 'axios';
+import axios from '../../api/axios';
 
 interface Appointment {
   _id: string;
@@ -57,440 +24,327 @@ interface Appointment {
   notes?: string;
 }
 
-const AppointmentManagement: React.FC = () => {
-  const [appointments, setAppointments] = useState<Appointment[]>([]);
+const doctors = [
+  'Dr. Sarah Johnson', 'Dr. Michael Chen', 'Dr. Emily Davis', 
+  'Dr. James Wilson', 'Dr. Lisa Patel', 'Dr. Robert Kim'
+];
+
+const departments = ['Cardiology', 'Neurology', 'Orthopedics', 'General Medicine', 'Pediatrics'];
+const types = ['OPD', 'IPD', 'Emergency'];
+const statuses = ['Scheduled', 'Completed'];
+
+const AppointmentForm: React.FC = () => {
+  const navigate = useNavigate();
+  const { id } = useParams<{ id: string }>();
+  const isEdit = !!id;
+  
+  const [formData, setFormData] = useState<Appointment>({
+    _id: '', appointmentId: '', patientName: '', doctorName: '', department: '',
+    date: '', time: '10:00', duration: 30, type: 'OPD', status: 'Scheduled', notes: ''
+  });
+  const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const [loading, setLoading] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [statusFilter, setStatusFilter] = useState('All');
-  const [dateFilter, setDateFilter] = useState('');
 
   useEffect(() => {
-    fetchAppointments();
-  }, [page, searchTerm, statusFilter, dateFilter]);
+    if (isEdit && id) {
+      const fetchAppointment = async () => {
+        try {
+          const response = await axios.get(`/api/appointments/${id}`);
+          setFormData(response.data);
+        } catch (error) {
+          alert('❌ Appointment not found');
+          setTimeout(() => navigate('/app/appointments'), 1500);
+        }
+      };
+      fetchAppointment();
+    }
+  }, [id, isEdit, navigate]);
 
-  const fetchAppointments = async () => {
+  const validate = () => {
+    const newErrors: any = {};
+    if (!formData.patientName.trim()) newErrors.patientName = 'Patient name required';
+    if (!formData.doctorName) newErrors.doctorName = 'Doctor required';
+    if (!formData.date) newErrors.date = 'Date required';
+    if (!formData.department) newErrors.department = 'Department required';
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!validate()) return;
+
     setLoading(true);
     try {
-      const response = await axios.get('/api/appointments', {
-        params: {
-          page,
-          limit: 10,
-          search: searchTerm,
-          status: statusFilter !== 'All' ? statusFilter : '',
-          date: dateFilter,
-        },
-      });
-      setAppointments(response.data.appointments);
-      setTotalPages(response.data.totalPages);
-    } catch (error) {
-      console.error('Failed to fetch appointments:', error);
-      // Mock data for demo
-      setAppointments([
-        {
-          _id: '1',
-          appointmentId: 'APT000001',
-          patientName: 'John Doe',
-          doctorName: 'Dr. Sarah Johnson',
-          department: 'Cardiology',
-          date: '2024-02-03',
-          time: '10:00',
-          duration: 30,
-          type: 'OPD',
-          status: 'Scheduled',
-          notes: 'Regular checkup',
-        },
-        {
-          _id: '2',
-          appointmentId: 'APT000002',
-          patientName: 'Jane Smith',
-          doctorName: 'Dr. Michael Chen',
-          department: 'Neurology',
-          date: '2024-02-03',
-          time: '14:30',
-          duration: 45,
-          type: 'OPD',
-          status: 'Confirmed',
-          notes: 'Follow-up consultation',
-        },
-        {
-          _id: '3',
-          appointmentId: 'APT000003',
-          patientName: 'Robert Wilson',
-          doctorName: 'Dr. Emily Davis',
-          department: 'Orthopedics',
-          date: '2024-02-04',
-          time: '09:15',
-          duration: 30,
-          type: 'OPD',
-          status: 'Completed',
-          notes: 'Knee pain consultation',
-        },
-      ]);
+      if (isEdit) {
+        await axios.put(`/api/appointments/${id}`, formData);
+        alert('✅ Appointment updated successfully!');
+      } else {
+        await axios.post('/api/appointments', formData);
+        alert('✅ Appointment created successfully!');
+      }
+      setTimeout(() => navigate('/app/appointments'), 1500);
+    } catch (error: any) {
+      alert(`❌ Error: ${error.response?.data?.error || 'Failed to save appointment'}`);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleViewAppointment = (appointment: Appointment) => {
-    setSelectedAppointment(appointment);
-    setDialogOpen(true);
-  };
+  const handleCancel = () => navigate('/app/appointments');
 
-  const handleStatusChange = async (appointmentId: string, newStatus: string) => {
+  return (
+    <Box sx={{ p: 3 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
+        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+          <Button startIcon={<Edit />} onClick={handleCancel}>
+            Back to List
+          </Button>
+          <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
+            {isEdit ? 'Edit Appointment' : 'New Appointment'}
+          </Typography>
+        </Box>
+        {isEdit && formData.appointmentId && (
+          <Chip label={formData.appointmentId} color="primary" variant="outlined" />
+        )}
+      </Box>
+
+      <Card>
+        <CardContent>
+          <Box component="form" onSubmit={handleSubmit} sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            {isEdit && (
+              <TextField 
+                label="Appointment ID" 
+                value={formData.appointmentId}
+                fullWidth 
+                InputProps={{ readOnly: true }}
+                sx={{ bgcolor: 'grey.100' }}
+              />
+            )}
+
+            <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+              <TextField fullWidth label="Patient Name" value={formData.patientName}
+                onChange={(e) => setFormData({ ...formData, patientName: e.target.value })}
+                error={!!errors.patientName} helperText={errors.patientName} required />
+              <FormControl fullWidth error={!!errors.doctorName} sx={{ minWidth: 250 }}>
+                <InputLabel>Doctor</InputLabel>
+                <Select value={formData.doctorName}
+                  onChange={(e) => setFormData({ ...formData, doctorName: e.target.value })}
+                  label="Doctor">
+                  {doctors.map(doctor => (
+                    <MenuItem key={doctor} value={doctor}>{doctor}</MenuItem>
+                  ))}
+                </Select>
+                {errors.doctorName && <FormHelperText>{errors.doctorName}</FormHelperText>}
+              </FormControl>
+            </Box>
+
+            <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+              <FormControl fullWidth error={!!errors.department} sx={{ minWidth: 200 }}>
+                <InputLabel>Department</InputLabel>
+                <Select value={formData.department}
+                  onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                  label="Department">
+                  {departments.map(dept => <MenuItem key={dept} value={dept}>{dept}</MenuItem>)}
+                </Select>
+                {errors.department && <FormHelperText>{errors.department}</FormHelperText>}
+              </FormControl>
+              <TextField select label="Type" fullWidth value={formData.type} sx={{ minWidth: 150 }}
+                onChange={(e) => setFormData({ ...formData, type: e.target.value })}>
+                {types.map(t => <MenuItem key={t} value={t}>{t}</MenuItem>)}
+              </TextField>
+            </Box>
+
+            <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+              <TextField type="date" label="Date" value={formData.date}
+                onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                InputLabelProps={{ shrink: true }} error={!!errors.date} helperText={errors.date}
+                sx={{ minWidth: 200 }} required />
+              <TextField type="time" label="Time" value={formData.time}
+                onChange={(e) => setFormData({ ...formData, time: e.target.value })}
+                InputLabelProps={{ shrink: true }} sx={{ minWidth: 200 }} inputProps={{ step: 300 }} />
+              <TextField label="Duration (min)" type="number" value={formData.duration}
+                onChange={(e) => setFormData({ ...formData, duration: Number(e.target.value) })}
+                sx={{ minWidth: 200 }} inputProps={{ min: 15, max: 120 }} />
+            </Box>
+
+            <FormControl fullWidth sx={{ minWidth: 200 }}>
+              <InputLabel>Status</InputLabel>
+              <Select value={formData.status}
+                onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                label="Status">
+                {statuses.map(status => (
+                  <MenuItem key={status} value={status}>{status}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            <TextField label="Notes (optional)" multiline rows={3} fullWidth value={formData.notes || ''}
+              onChange={(e) => setFormData({ ...formData, notes: e.target.value })} />
+
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              <Button variant="contained" type="submit" disabled={loading} fullWidth>
+                {loading 
+                  ? (isEdit ? 'Updating...' : 'Creating...') 
+                  : (isEdit ? 'Update Appointment' : 'Create Appointment')
+                }
+              </Button>
+              <Button variant="outlined" onClick={handleCancel} fullWidth disabled={loading}>
+                Cancel
+              </Button>
+            </Box>
+          </Box>
+        </CardContent>
+      </Card>
+    </Box>
+  );
+};
+
+// ✅ PERFECT SORTING: Scheduled First → Sorted by Date/Time
+const AppointmentList: React.FC = () => {
+  const navigate = useNavigate();
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+
+  const fetchAppointments = useCallback(async () => {
     try {
-      await axios.put(`/api/appointments/${appointmentId}`, { status: newStatus });
-      fetchAppointments();
+      const response = await axios.get('/api/appointments', {
+        params: { page, limit: 50, search: searchTerm } // Increased limit for sorting
+      });
+      setAppointments(response.data.appointments || []);
+      setTotalPages(response.data.totalPages || 1);
     } catch (error) {
-      console.error('Failed to update appointment status:', error);
+      console.error('Failed to fetch appointments:', error);
+      alert('Failed to load appointments');
     }
-  };
+  }, [page, searchTerm]);
+
+  useEffect(() => {
+    fetchAppointments();
+  }, [fetchAppointments]);
+
+  // ✅ PRIORITY SORTING: 
+  // 1. Scheduled (0) before Completed (1)
+  // 2. Within each group: Soonest date/time first (ascending)
+  const sortedAppointments = useMemo(() => {
+    return [...appointments].sort((a, b) => {
+      // Step 1: Status priority (Scheduled=0, Completed=1)
+      const statusPriorityA = a.status === 'Scheduled' ? 0 : 1;
+      const statusPriorityB = b.status === 'Scheduled' ? 0 : 1;
+      
+      if (statusPriorityA !== statusPriorityB) {
+        return statusPriorityA - statusPriorityB; // Scheduled first
+      }
+      
+      // Step 2: Date + Time (ascending - soonest first)
+      const dateTimeA = new Date(`${a.date}T${a.time}:00`).getTime();
+      const dateTimeB = new Date(`${b.date}T${b.time}:00`).getTime();
+      
+      return dateTimeA - dateTimeB; // Soonest first
+    });
+  }, [appointments]);
 
   const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'Scheduled': return 'info';
-      case 'Confirmed': return 'primary';
-      case 'In Progress': return 'warning';
-      case 'Completed': return 'success';
-      case 'Cancelled': return 'error';
-      case 'No Show': return 'error';
-      default: return 'default';
-    }
+    const colors: Record<string, any> = {
+      Scheduled: 'info', Confirmed: 'primary', 'In Progress': 'warning',
+      Completed: 'success', Cancelled: 'error', 'No Show': 'error'
+    };
+    return colors[status] || 'default';
   };
 
-  const getTypeColor = (type: string) => {
-    switch (type) {
-      case 'OPD': return 'primary';
-      case 'IPD': return 'secondary';
-      case 'Emergency': return 'error';
-      default: return 'default';
-    }
+  const handleEdit = (appointment: Appointment) => {
+    navigate(`new/${appointment._id}`);
   };
 
   return (
-    <Routes>
-      <Route
-        path="/"
-        element={
-          <Box>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-              <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
-                Appointment Management
-              </Typography>
-              <Button
-                variant="contained"
-                startIcon={<Add />}
-                onClick={() => {/* Navigate to new appointment */}}
-              >
-                Book Appointment
-              </Button>
-            </Box>
+    <Box sx={{ p: 3 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+        <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
+          Appointment Management ({sortedAppointments.length})
+        </Typography>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Chip label={`Scheduled: ${sortedAppointments.filter(a => a.status === 'Scheduled').length}`} color="info" />
+          <Chip label={`Completed: ${sortedAppointments.filter(a => a.status === 'Completed').length}`} color="success" />
+        </Box>
+        <Button variant="contained" startIcon={<Add />} onClick={() => navigate('new')}>
+          Book Appointment
+        </Button>
+      </Box>
 
-            {/* Search and Filters */}
-            <Card sx={{ mb: 3 }}>
-              <CardContent>
-                <Box sx={{ 
-                  display: 'flex', 
-                  flexWrap: 'wrap', 
-                  gap: 2, 
-                  alignItems: 'center' 
-                }}>
-                  <Box sx={{ flex: '1 1 300px', minWidth: 300 }}>
-                    <TextField
-                      fullWidth
-                      placeholder="Search appointments by patient, doctor..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      InputProps={{
-                        startAdornment: (
-                          <InputAdornment position="start">
-                            <Search />
-                          </InputAdornment>
-                        ),
-                      }}
-                    />
-                  </Box>
-                  <TextField
-                    type="date"
-                    label="Date"
-                    value={dateFilter}
-                    onChange={(e) => setDateFilter(e.target.value)}
-                    InputLabelProps={{ shrink: true }}
-                    sx={{ minWidth: 150 }}
-                  />
-                  <FormControl sx={{ minWidth: 120 }}>
-                    <InputLabel>Status</InputLabel>
-                    <Select
-                      value={statusFilter}
-                      label="Status"
-                      onChange={(e) => setStatusFilter(e.target.value)}
-                    >
-                      <MenuItem value="All">All Status</MenuItem>
-                      <MenuItem value="Scheduled">Scheduled</MenuItem>
-                      <MenuItem value="Confirmed">Confirmed</MenuItem>
-                      <MenuItem value="Completed">Completed</MenuItem>
-                      <MenuItem value="Cancelled">Cancelled</MenuItem>
-                    </Select>
-                  </FormControl>
-                  <Box sx={{ display: 'flex', gap: 1 }}>
-                    <Chip label="Today" color="primary" />
-                    <Chip label="This Week" variant="outlined" />
-                    <Chip label="Pending" variant="outlined" />
-                  </Box>
-                </Box>
-              </CardContent>
-            </Card>
+      <Card sx={{ mb: 3 }}>
+        <CardContent>
+          <TextField fullWidth placeholder="Search by patient/doctor..."
+            value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
+            InputProps={{ startAdornment: <InputAdornment position="start"><Search /></InputAdornment> }}
+            sx={{ mb: 2 }} />
+        </CardContent>
+      </Card>
 
-            {/* Appointments Table */}
-            <Card>
-              <CardContent>
-                <TableContainer component={Paper} elevation={0}>
-                  <Table>
-                    <TableHead>
-                      <TableRow>
-                        <TableCell>Appointment</TableCell>
-                        <TableCell>Patient</TableCell>
-                        <TableCell>Doctor</TableCell>
-                        <TableCell>Date & Time</TableCell>
-                        <TableCell>Type</TableCell>
-                        <TableCell>Status</TableCell>
-                        <TableCell>Actions</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {appointments.map((appointment) => (
-                        <TableRow key={appointment._id} hover>
-                          <TableCell>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                              <Avatar sx={{ bgcolor: 'primary.main' }}>
-                                <EventNote />
-                              </Avatar>
-                              <Box>
-                                <Typography variant="subtitle2" fontWeight="bold">
-                                  {appointment.appointmentId}
-                                </Typography>
-                                <Typography variant="body2" color="textSecondary">
-                                  {appointment.duration} min • {appointment.department}
-                                </Typography>
-                              </Box>
-                            </Box>
-                          </TableCell>
-                          <TableCell>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                              <Person sx={{ fontSize: 16, color: 'text.secondary' }} />
-                              <Typography variant="body2">
-                                {appointment.patientName}
-                              </Typography>
-                            </Box>
-                          </TableCell>
-                          <TableCell>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                              <LocalHospital sx={{ fontSize: 16, color: 'text.secondary' }} />
-                              <Typography variant="body2">
-                                {appointment.doctorName}
-                              </Typography>
-                            </Box>
-                          </TableCell>
-                          <TableCell>
-                            <Box>
-                              <Typography variant="body2" fontWeight="bold">
-                                {format(new Date(appointment.date), 'MMM dd, yyyy')}
-                              </Typography>
-                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                <AccessTime sx={{ fontSize: 16, color: 'text.secondary' }} />
-                                <Typography variant="body2" color="textSecondary">
-                                  {appointment.time}
-                                </Typography>
-                              </Box>
-                            </Box>
-                          </TableCell>
-                          <TableCell>
-                            <Chip
-                              label={appointment.type}
-                              color={getTypeColor(appointment.type)}
-                              size="small"
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Chip
-                              label={appointment.status}
-                              color={getStatusColor(appointment.status)}
-                              size="small"
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Box sx={{ display: 'flex', gap: 1 }}>
-                              <IconButton
-                                size="small"
-                                onClick={() => handleViewAppointment(appointment)}
-                              >
-                                <Visibility />
-                              </IconButton>
-                              <IconButton
-                                size="small"
-                                onClick={() => {/* Edit appointment */}}
-                              >
-                                <Edit />
-                              </IconButton>
-                              {appointment.status === 'Scheduled' && (
-                                <IconButton
-                                  size="small"
-                                  onClick={() => handleStatusChange(appointment._id, 'Confirmed')}
-                                  color="success"
-                                >
-                                  <CheckCircle />
-                                </IconButton>
-                              )}
-                              {(appointment.status === 'Scheduled' || appointment.status === 'Confirmed') && (
-                                <IconButton
-                                  size="small"
-                                  onClick={() => handleStatusChange(appointment._id, 'Cancelled')}
-                                  color="error"
-                                >
-                                  <Cancel />
-                                </IconButton>
-                              )}
-                            </Box>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
-
-                {/* Pagination */}
-                <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
-                  <Pagination
-                    count={totalPages}
-                    page={page}
-                    onChange={(_, newPage) => setPage(newPage)}
-                    color="primary"
-                  />
-                </Box>
-              </CardContent>
-            </Card>
-
-            {/* Appointment Details Dialog */}
-            <Dialog
-              open={dialogOpen}
-              onClose={() => setDialogOpen(false)}
-              maxWidth="md"
-              fullWidth
-            >
-              {selectedAppointment && (
-                <>
-                  <DialogTitle>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                      <Avatar sx={{ bgcolor: 'primary.main' }}>
-                        <EventNote />
-                      </Avatar>
-                      <Box>
-                        <Typography variant="h6">
-                          Appointment Details
-                        </Typography>
-                        <Typography variant="body2" color="textSecondary">
-                          {selectedAppointment.appointmentId}
-                        </Typography>
-                      </Box>
-                    </Box>
-                  </DialogTitle>
-                  <DialogContent>
-                    <Box sx={{ 
-                      display: 'grid', 
-                      gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', 
-                      gap: 3 
+      <Card>
+        <CardContent>
+          <TableContainer component={Paper} sx={{ maxHeight: 600 }}>
+            <Table stickyHeader>
+              <TableHead>
+                <TableRow>
+                  <TableCell>ID</TableCell>
+                  <TableCell>Patient</TableCell>
+                  <TableCell>Doctor</TableCell>
+                  <TableCell>Date & Time</TableCell>
+                  <TableCell>Department</TableCell>
+                  <TableCell>Status</TableCell>
+                  <TableCell>Actions</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {sortedAppointments.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} align="center" sx={{ py: 4 }}>
+                      <Typography>No appointments found</Typography>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  sortedAppointments.map((apt, index) => (
+                    <TableRow key={apt._id} hover sx={{ 
+                      '&:first-child': { borderTop: '2px solid #1976d2' } // Highlight first (soonest)
                     }}>
-                      <Box>
-                        <Typography variant="subtitle2" gutterBottom>
-                          Patient Information
-                        </Typography>
-                        <Box sx={{ pl: 2 }}>
-                          <Typography variant="body2" sx={{ mb: 1 }}>
-                            <strong>Name:</strong> {selectedAppointment.patientName}
-                          </Typography>
-                        </Box>
-                      </Box>
-                      <Box>
-                        <Typography variant="subtitle2" gutterBottom>
-                          Doctor Information
-                        </Typography>
-                        <Box sx={{ pl: 2 }}>
-                          <Typography variant="body2" sx={{ mb: 1 }}>
-                            <strong>Doctor:</strong> {selectedAppointment.doctorName}
-                          </Typography>
-                          <Typography variant="body2" sx={{ mb: 1 }}>
-                            <strong>Department:</strong> {selectedAppointment.department}
-                          </Typography>
-                        </Box>
-                      </Box>
-                      <Box>
-                        <Typography variant="subtitle2" gutterBottom>
-                          Appointment Details
-                        </Typography>
-                        <Box sx={{ pl: 2 }}>
-                          <Typography variant="body2" sx={{ mb: 1 }}>
-                            <strong>Date:</strong> {format(new Date(selectedAppointment.date), 'MMM dd, yyyy')}
-                          </Typography>
-                          <Typography variant="body2" sx={{ mb: 1 }}>
-                            <strong>Time:</strong> {selectedAppointment.time}
-                          </Typography>
-                          <Typography variant="body2" sx={{ mb: 1 }}>
-                            <strong>Duration:</strong> {selectedAppointment.duration} minutes
-                          </Typography>
-                          <Typography variant="body2" sx={{ mb: 1 }}>
-                            <strong>Type:</strong> {selectedAppointment.type}
-                          </Typography>
-                        </Box>
-                      </Box>
-                      {selectedAppointment.notes && (
-                        <Box sx={{ gridColumn: '1 / -1' }}>
-                          <Typography variant="subtitle2" gutterBottom>
-                            Notes
-                          </Typography>
-                          <Box sx={{ pl: 2 }}>
-                            <Typography variant="body2">
-                              {selectedAppointment.notes}
-                            </Typography>
-                          </Box>
-                        </Box>
-                      )}
-                    </Box>
-                  </DialogContent>
-                  <DialogActions>
-                    <Button onClick={() => setDialogOpen(false)}>Close</Button>
-                    {selectedAppointment.status === 'Scheduled' && (
-                      <Button
-                        variant="outlined"
-                        color="success"
-                        onClick={() => {
-                          handleStatusChange(selectedAppointment._id, 'Confirmed');
-                          setDialogOpen(false);
-                        }}
-                      >
-                        Confirm
-                      </Button>
-                    )}
-                    <Button
-                      variant="contained"
-                      onClick={() => {
-                        setDialogOpen(false);
-                        // Navigate to edit
-                      }}
-                    >
-                      Edit Appointment
-                    </Button>
-                  </DialogActions>
-                </>
-              )}
-            </Dialog>
-          </Box>
-        }
-      />
-    </Routes>
+                      <TableCell>{apt.appointmentId}</TableCell>
+                      <TableCell>{apt.patientName}</TableCell>
+                      <TableCell>{apt.doctorName}</TableCell>
+                      <TableCell>
+                        <strong>{format(new Date(`${apt.date}T${apt.time}:00`), 'MMM dd, HH:mm')}</strong>
+                      </TableCell>
+                      <TableCell>{apt.department}</TableCell>
+                      <TableCell>
+                        <Chip label={apt.status} color={getStatusColor(apt.status)} size="small" />
+                      </TableCell>
+                      <TableCell>
+                        <IconButton size="small" onClick={() => handleEdit(apt)}>
+                          <Edit />
+                        </IconButton>
+                        <IconButton size="small">
+                          <Visibility />
+                        </IconButton>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </CardContent>
+      </Card>
+    </Box>
   );
 };
+
+const AppointmentManagement: React.FC = () => (
+  <Routes>
+    <Route index element={<AppointmentList />} />
+    <Route path="new" element={<AppointmentForm />} />
+    <Route path="new/:id" element={<AppointmentForm />} />
+  </Routes>
+);
 
 export default AppointmentManagement;
