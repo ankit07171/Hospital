@@ -1,12 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { Routes, Route } from 'react-router-dom';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Box,
   Card,
   CardContent,
   Typography,
   Button,
-  TextField,
   Table,
   TableBody,
   TableCell,
@@ -20,557 +19,775 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  Avatar,
-  Pagination,
-  InputAdornment,
+  TextField,
   FormControl,
   InputLabel,
   Select,
   MenuItem,
+  Divider,
+  Alert,
+  Autocomplete,
   LinearProgress,
+  Avatar,
+  Stack,
 } from '@mui/material';
 import {
   Add,
-  Search,
   Edit,
-  Visibility,
+  Delete,
   Science,
-  Person,
-  LocalHospital,
-  Assignment,
-  CheckCircle,
   Warning,
+  CheckCircle,
   Error,
-  Pending,
+  LocalHospital,
+  TrendingUp,
+  Save,
+  Search as SearchIcon,
 } from '@mui/icons-material';
-import { format } from 'date-fns';
-import axios from 'axios';
+import axios from '../../api/axios';
 
-interface LabTest {
+interface LabReport {
   _id: string;
-  testId: string;
-  patientName: string;
-  doctorName: string;
-  testName: string;
-  category: string;
+  testType: string;
+  testCategory: string;
+  testDate: string;
+  status: 'Normal' | 'Abnormal' | 'Critical' | 'Pending';
+  keyResults: string;
+  doctorNotes: string;
+  reviewedBy: string;
+}
+
+interface Patient {
+  _id: string;
+  age: number;
   status: string;
-  orderedDate: string;
-  completedDate?: string;
-  cost: number;
-  results?: {
-    summary: string;
-    aiSummary?: string;
-    values: Array<{
-      parameter: string;
-      value: string;
-      unit: string;
-      status: string;
-    }>;
+  personalInfo: {
+    firstName: string;
+    lastName: string;
+    gender: string;
+    phoneNumber: string;
+  };
+  medicalInfo: {
+    bloodGroup: string;
+    allergies: string[];
+    chronicConditions: string[];
+  };
+  riskAssessment: {
+    riskScore: number;
+    riskLevel: string;
+    lastCalculated: string;
+    breakdown: {
+      age: number;
+      conditions: number;
+      labs: number;
+      allergies: number;
+      interactions: number;
+    };
   };
 }
 
 const LabManagement: React.FC = () => {
-  const [labTests, setLabTests] = useState<LabTest[]>([]);
-  const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
+
+  // States
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
+  const [labReports, setLabReports] = useState<LabReport[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [selectedTest, setSelectedTest] = useState<LabTest | null>(null);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [statusFilter, setStatusFilter] = useState('All');
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
 
+  // Dialog states
+  const [labDialogOpen, setLabDialogOpen] = useState(false);
+  const [editingLab, setEditingLab] = useState<LabReport | null>(null);
+  const [deleteDialog, setDeleteDialog] = useState<LabReport | null>(null);
+  const [medicalDialogOpen, setMedicalDialogOpen] = useState(false);
+  const [savingLab, setSavingLab] = useState(false);
+  const [savingMedical, setSavingMedical] = useState(false);
+
+  const [labForm, setLabForm] = useState({
+    testType: '',
+    testCategory: 'Other',
+    testDate: new Date().toISOString().split('T')[0],
+    status: 'Pending' as 'Normal' | 'Abnormal' | 'Critical' | 'Pending',
+    keyResults: '',
+    doctorNotes: '',
+    reviewedBy: '',
+  });
+
+  const [medicalForm, setMedicalForm] = useState({
+    bloodGroup: '',
+    allergies: [] as string[],
+    chronicConditions: [] as string[],
+  });
+
+  const testCategories = ['Blood Test', 'Imaging', 'Cardiology', 'Metabolic', 'Other'];
+
+  // Color functions
+  const getRiskColor = (level: string): "success" | "warning" | "error" => {
+    switch(level) {
+      case 'Critical': return 'error';
+      case 'High':
+      case 'Medium': return 'warning';
+      default: return 'success';
+    }
+  };
+
+  const getRiskBorderColor = (level: string): string => {
+    switch(level) {
+      case 'Critical': return '#f44336';
+      case 'High':
+      case 'Medium': return '#ff9800';
+      default: return '#4caf50';
+    }
+  };
+
+  // Load patients
   useEffect(() => {
-    fetchLabTests();
-  }, [page, searchTerm, statusFilter]);
+    fetchPatients();
+  }, []);
 
-  const fetchLabTests = async () => {
-    setLoading(true);
+  // Auto-hide success message
+  useEffect(() => {
+    if (success) {
+      const timer = setTimeout(() => setSuccess(''), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [success]);
+
+  const fetchPatients = async () => {
     try {
-      const response = await axios.get('/api/lab', {
-        params: {
-          page,
-          limit: 10,
-          search: searchTerm,
-          status: statusFilter !== 'All' ? statusFilter : '',
-        },
-      });
-      setLabTests(response.data.labTests);
-      setTotalPages(response.data.totalPages);
-    } catch (error) {
-      console.error('Failed to fetch lab tests:', error);
-      // Mock data for demo
-      setLabTests([
-        {
-          _id: '1',
-          testId: 'LAB000001',
-          patientName: 'John Doe',
-          doctorName: 'Dr. Sarah Johnson',
-          testName: 'Complete Blood Count',
-          category: 'Hematology',
-          status: 'Completed',
-          orderedDate: '2024-02-01',
-          completedDate: '2024-02-02',
-          cost: 500,
-          results: {
-            summary: 'All parameters within normal range',
-            aiSummary: 'No abnormalities detected. Patient shows healthy blood profile.',
-            values: [
-              { parameter: 'Hemoglobin', value: '14.2', unit: 'g/dL', status: 'Normal' },
-              { parameter: 'WBC Count', value: '7500', unit: '/μL', status: 'Normal' },
-              { parameter: 'Platelet Count', value: '250000', unit: '/μL', status: 'Normal' },
-            ],
-          },
-        },
-        {
-          _id: '2',
-          testId: 'LAB000002',
-          patientName: 'Jane Smith',
-          doctorName: 'Dr. Michael Chen',
-          testName: 'Lipid Profile',
-          category: 'Biochemistry',
-          status: 'In Progress',
-          orderedDate: '2024-02-02',
-          cost: 800,
-        },
-        {
-          _id: '3',
-          testId: 'LAB000003',
-          patientName: 'Robert Wilson',
-          doctorName: 'Dr. Emily Davis',
-          testName: 'Thyroid Function Test',
-          category: 'Endocrinology',
-          status: 'Sample Collected',
-          orderedDate: '2024-02-03',
-          cost: 1200,
-        },
-      ]);
+      setLoading(true);
+      setError('');
+      const response = await axios.get('/api/patients');
+      setPatients(response.data);
+    } catch (error: any) {
+      console.error('Failed to fetch patients:', error);
+      setError('Failed to load patients');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleViewTest = (test: LabTest) => {
-    setSelectedTest(test);
-    setDialogOpen(true);
-  };
-
-  const handleStatusChange = async (testId: string, newStatus: string) => {
+  const handlePatientSelect = useCallback(async (patientId: string) => {
     try {
-      await axios.put(`/api/lab/${testId}/status`, { status: newStatus });
-      fetchLabTests();
-    } catch (error) {
-      console.error('Failed to update test status:', error);
+      setLoading(true);
+      const patientResponse = await axios.get(`/api/patients/${patientId}`);
+      const labResponse = await axios.get(`/api/lab/patient/${patientId}`);
+      
+      const patient = patientResponse.data;
+      setSelectedPatient(patient);
+      setLabReports(labResponse.data);
+      
+      setMedicalForm({
+        bloodGroup: patient.medicalInfo?.bloodGroup || '',
+        allergies: patient.medicalInfo?.allergies || [],
+        chronicConditions: patient.medicalInfo?.chronicConditions || [],
+      });
+    } catch (error: any) {
+      console.error('Failed to load patient data:', error);
+      setError('Failed to load patient data');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const handleMedicalSave = async () => {
+    if (!selectedPatient) return;
+    try {
+      setSavingMedical(true);
+      setError('');
+      await axios.patch(`/api/patients/${selectedPatient._id}/medical-info`, medicalForm);
+      
+      const patientResponse = await axios.get(`/api/patients/${selectedPatient._id}`);
+      setSelectedPatient(patientResponse.data);
+      setMedicalForm({
+        bloodGroup: patientResponse.data.medicalInfo?.bloodGroup || '',
+        allergies: patientResponse.data.medicalInfo?.allergies || [],
+        chronicConditions: patientResponse.data.medicalInfo?.chronicConditions || [],
+      });
+      
+      fetchPatients(); // Refresh list
+      setMedicalDialogOpen(false);
+      setSuccess('✅ Medical info updated + Risk recalculated!');
+    } catch (error: any) {
+      console.error('Medical save error:', error);
+      setError(error.response?.data?.message || 'Failed to update medical info');
+    } finally {
+      setSavingMedical(false);
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'Ordered': return 'info';
-      case 'Sample Collected': return 'warning';
-      case 'In Progress': return 'primary';
-      case 'Completed': return 'success';
-      case 'Cancelled': return 'error';
-      default: return 'default';
+  const handleLabSave = async () => {
+    if (!selectedPatient || !labForm.testType) return;
+    try {
+      setSavingLab(true);
+      setError('');
+      const labData = { patientId: selectedPatient._id, ...labForm };
+      
+      if (editingLab) {
+        await axios.put(`/api/lab/${editingLab._id}`, labData);
+      } else {
+        await axios.post('/api/lab', labData);
+      }
+
+      setLabDialogOpen(false);
+      setEditingLab(null);
+      setLabForm({
+        testType: '',
+        testCategory: 'Other',
+        testDate: new Date().toISOString().split('T')[0],
+        status: 'Pending',
+        keyResults: '',
+        doctorNotes: '',
+        reviewedBy: '',
+      });
+
+      const labResponse = await axios.get(`/api/lab/patient/${selectedPatient._id}`);
+      setLabReports(labResponse.data);
+      setSuccess(editingLab ? 'Lab updated!' : '✅ New lab report created!');
+    } catch (error: any) {
+      console.error('Lab save error:', error);
+      setError(error.response?.data?.message || 'Failed to save lab report');
+    } finally {
+      setSavingLab(false);
     }
   };
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'Ordered': return <Pending />;
-      case 'Sample Collected': return <Assignment />;
-      case 'In Progress': return <Science />;
-      case 'Completed': return <CheckCircle />;
-      case 'Cancelled': return <Error />;
-      default: return <Pending />;
+  const handleLabDelete = async (labId: string) => {
+    try {
+      await axios.delete(`/api/lab/${labId}`);
+      setLabReports(labReports.filter(lab => lab._id !== labId));
+      setSuccess('Lab report deleted successfully');
+    } catch (error: any) {
+      console.error('Delete error:', error);
+      setError('Failed to delete lab report');
     }
   };
 
-  const getParameterStatusColor = (status: string) => {
-    switch (status) {
-      case 'Normal': return 'success';
-      case 'High': return 'warning';
-      case 'Low': return 'warning';
-      case 'Critical': return 'error';
-      default: return 'default';
-    }
+  const handleLabFormChange = useCallback((field: keyof typeof labForm) => 
+    (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+      setLabForm(prev => ({ ...prev, [field]: event.target.value }));
+    },
+    []
+  );
+
+  const handleLabEdit = useCallback((lab: LabReport) => {
+    setEditingLab(lab);
+    setLabForm({
+      testType: lab.testType,
+      testCategory: lab.testCategory,
+      testDate: new Date(lab.testDate).toISOString().split('T')[0],
+      status: lab.status,
+      keyResults: lab.keyResults || '',
+      doctorNotes: lab.doctorNotes || '',
+      reviewedBy: lab.reviewedBy || '',
+    });
+    setLabDialogOpen(true);
+  }, []);
+
+  const handleBloodGroupChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setMedicalForm({ ...medicalForm, bloodGroup: event.target.value });
   };
+
+  const handleAllergiesChange = (_: any, newValue: string[]) => {
+    setMedicalForm({ ...medicalForm, allergies: newValue });
+  };
+
+  const handleConditionsChange = (_: any, newValue: string[]) => {
+    setMedicalForm({ ...medicalForm, chronicConditions: newValue });
+  };
+
+  const filteredPatients = useMemo(() =>
+    patients.filter(patient =>
+      patient.personalInfo.firstName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      patient.personalInfo.lastName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      patient.riskAssessment.riskLevel.toLowerCase().includes(searchTerm.toLowerCase())
+    ),
+    [patients, searchTerm]
+  );
+
+  const statusIcon = (s: string) =>
+    s === 'Normal' ? <CheckCircle color="success" /> :
+    s === 'Critical' ? <Error color="error" /> :
+    s === 'Abnormal' ? <Warning color="warning" /> :
+    <Science color="info" />;
+
+  if (loading && !selectedPatient) return <LinearProgress />;
 
   return (
-    <Routes>
-      <Route
-        path="/"
-        element={
+    <Box sx={{ p: 3 }}>
+      {/* HEADER */}
+      <Stack direction="row" justifyContent="space-between" alignItems="center" mb={4}>
+        <Stack direction="row" spacing={2} alignItems="center">
+          <Science color="primary" sx={{ fontSize: 40 }} />
           <Box>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-              <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
-                Laboratory Management
-              </Typography>
-              <Button
-                variant="contained"
-                startIcon={<Add />}
-                onClick={() => {/* Navigate to new test order */}}
-              >
-                Order Test
-              </Button>
-            </Box>
+            <Typography variant="h3" component="h1">Laboratory Management</Typography>
+            <Typography variant="h6" color="text.secondary">
+              Manage patient lab reports and medical information
+            </Typography>
+          </Box>
+        </Stack>
+        <Button 
+          variant="outlined" 
+          onClick={fetchPatients}
+          disabled={loading}
+        >
+          Refresh
+        </Button>
+      </Stack>
 
-            {/* Stats Cards */}
-            <Box sx={{ 
-              display: 'grid', 
-              gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
-              gap: 2, 
-              mb: 3 
-            }}>
-              <Card>
-                <CardContent>
-                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <Box>
-                      <Typography color="textSecondary" gutterBottom variant="overline">
-                        Today's Tests
-                      </Typography>
-                      <Typography variant="h4" component="div" sx={{ fontWeight: 'bold' }}>
-                        24
-                      </Typography>
-                    </Box>
-                    <Avatar sx={{ bgcolor: 'primary.main' }}>
-                      <Science />
-                    </Avatar>
-                  </Box>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent>
-                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <Box>
-                      <Typography color="textSecondary" gutterBottom variant="overline">
-                        Pending Results
-                      </Typography>
-                      <Typography variant="h4" component="div" sx={{ fontWeight: 'bold' }}>
-                        8
-                      </Typography>
-                    </Box>
-                    <Avatar sx={{ bgcolor: 'warning.main' }}>
-                      <Pending />
-                    </Avatar>
-                  </Box>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent>
-                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <Box>
-                      <Typography color="textSecondary" gutterBottom variant="overline">
-                        Completed Today
-                      </Typography>
-                      <Typography variant="h4" component="div" sx={{ fontWeight: 'bold' }}>
-                        16
-                      </Typography>
-                    </Box>
-                    <Avatar sx={{ bgcolor: 'success.main' }}>
-                      <CheckCircle />
-                    </Avatar>
-                  </Box>
-                </CardContent>
-              </Card>
-            </Box>
+      {/* SUCCESS MESSAGE */}
+      {success && (
+        <Alert severity="success" sx={{ mb: 3 }} onClose={() => setSuccess('')}>
+          {success}
+        </Alert>
+      )}
 
-            {/* Search and Filters */}
-            <Card sx={{ mb: 3 }}>
-              <CardContent>
-                <Box sx={{ 
-                  display: 'flex', 
-                  flexWrap: 'wrap', 
-                  gap: 2, 
-                  alignItems: 'center' 
-                }}>
-                  <Box sx={{ flex: '1 1 300px', minWidth: 300 }}>
-                    <TextField
-                      fullWidth
-                      placeholder="Search tests by patient, test name..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      InputProps={{
-                        startAdornment: (
-                          <InputAdornment position="start">
-                            <Search />
-                          </InputAdornment>
-                        ),
-                      }}
-                    />
-                  </Box>
-                  <FormControl sx={{ minWidth: 150 }}>
-                    <InputLabel>Status</InputLabel>
-                    <Select
-                      value={statusFilter}
-                      label="Status"
-                      onChange={(e) => setStatusFilter(e.target.value)}
-                    >
-                      <MenuItem value="All">All Status</MenuItem>
-                      <MenuItem value="Ordered">Ordered</MenuItem>
-                      <MenuItem value="Sample Collected">Sample Collected</MenuItem>
-                      <MenuItem value="In Progress">In Progress</MenuItem>
-                      <MenuItem value="Completed">Completed</MenuItem>
-                    </Select>
-                  </FormControl>
-                  <Box sx={{ display: 'flex', gap: 1 }}>
-                    <Chip label="Today" color="primary" />
-                    <Chip label="Urgent" variant="outlined" />
-                    <Chip label="Pending" variant="outlined" />
-                  </Box>
-                </Box>
-              </CardContent>
-            </Card>
+      {/* ERROR MESSAGE */}
+      {error && (
+        <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError('')}>
+          {error}
+        </Alert>
+      )}
 
-            {/* Lab Tests Table */}
-            <Card>
-              <CardContent>
-                <TableContainer component={Paper} elevation={0}>
-                  <Table>
-                    <TableHead>
-                      <TableRow>
-                        <TableCell>Test Details</TableCell>
-                        <TableCell>Patient</TableCell>
-                        <TableCell>Doctor</TableCell>
-                        <TableCell>Category</TableCell>
-                        <TableCell>Status</TableCell>
-                        <TableCell>Cost</TableCell>
-                        <TableCell>Actions</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {labTests.map((test) => (
-                        <TableRow key={test._id} hover>
-                          <TableCell>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                              <Avatar sx={{ bgcolor: 'primary.main' }}>
-                                <Science />
-                              </Avatar>
-                              <Box>
-                                <Typography variant="subtitle2" fontWeight="bold">
-                                  {test.testName}
-                                </Typography>
-                                <Typography variant="body2" color="textSecondary">
-                                  {test.testId} • {format(new Date(test.orderedDate), 'MMM dd, yyyy')}
-                                </Typography>
-                              </Box>
-                            </Box>
-                          </TableCell>
-                          <TableCell>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                              <Person sx={{ fontSize: 16, color: 'text.secondary' }} />
-                              <Typography variant="body2">
-                                {test.patientName}
-                              </Typography>
-                            </Box>
-                          </TableCell>
-                          <TableCell>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                              <LocalHospital sx={{ fontSize: 16, color: 'text.secondary' }} />
-                              <Typography variant="body2">
-                                {test.doctorName}
-                              </Typography>
-                            </Box>
-                          </TableCell>
-                          <TableCell>
-                            <Chip
-                              label={test.category}
-                              size="small"
-                              variant="outlined"
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Chip
-                              icon={getStatusIcon(test.status)}
-                              label={test.status}
-                              color={getStatusColor(test.status)}
-                              size="small"
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Typography variant="body2" fontWeight="bold">
-                              ₹{test.cost}
-                            </Typography>
-                          </TableCell>
-                          <TableCell>
-                            <Box sx={{ display: 'flex', gap: 1 }}>
-                              <IconButton
-                                size="small"
-                                onClick={() => handleViewTest(test)}
-                              >
-                                <Visibility />
-                              </IconButton>
-                              <IconButton
-                                size="small"
-                                onClick={() => {/* Edit test */}}
-                              >
-                                <Edit />
-                              </IconButton>
-                              {test.status === 'Sample Collected' && (
-                                <IconButton
-                                  size="small"
-                                  onClick={() => handleStatusChange(test._id, 'In Progress')}
-                                  color="primary"
-                                >
-                                  <Science />
-                                </IconButton>
-                              )}
-                            </Box>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
+      {/* PATIENTS LIST */}
+      <Card sx={{ mb: 4 }}>
+        <CardContent>
+          <Stack direction="row" justifyContent="space-between" alignItems="center" mb={3}>
+            <Typography variant="h5">Patients ({filteredPatients.length})</Typography>
+            <TextField
+              size="small"
+              placeholder="Search patients by name..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              InputProps={{
+                startAdornment: <SearchIcon sx={{ color: 'action.active', mr: 1 }} />,
+              }}
+              sx={{ minWidth: 300 }}
+            />
+          </Stack>
 
-                {/* Pagination */}
-                <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
-                  <Pagination
-                    count={totalPages}
-                    page={page}
-                    onChange={(_, newPage) => setPage(newPage)}
-                    color="primary"
-                  />
-                </Box>
-              </CardContent>
-            </Card>
-
-            {/* Test Details Dialog */}
-            <Dialog
-              open={dialogOpen}
-              onClose={() => setDialogOpen(false)}
-              maxWidth="md"
-              fullWidth
-            >
-              {selectedTest && (
-                <>
-                  <DialogTitle>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                      <Avatar sx={{ bgcolor: 'primary.main' }}>
-                        <Science />
-                      </Avatar>
-                      <Box>
-                        <Typography variant="h6">
-                          {selectedTest.testName}
-                        </Typography>
-                        <Typography variant="body2" color="textSecondary">
-                          {selectedTest.testId} • {selectedTest.category}
-                        </Typography>
-                      </Box>
-                    </Box>
-                  </DialogTitle>
-                  <DialogContent>
-                    <Box sx={{ 
-                      display: 'grid', 
-                      gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', 
-                      gap: 3 
-                    }}>
-                      <Box>
-                        <Typography variant="subtitle2" gutterBottom>
-                          Test Information
-                        </Typography>
-                        <Box sx={{ pl: 2 }}>
-                          <Typography variant="body2" sx={{ mb: 1 }}>
-                            <strong>Patient:</strong> {selectedTest.patientName}
+          <TableContainer sx={{ maxHeight: 400 }}>
+            <Table stickyHeader>
+              <TableHead>
+                <TableRow>
+                  <TableCell sx={{ fontWeight: 'bold' }}>Patient</TableCell>
+                  <TableCell sx={{ fontWeight: 'bold' }}>Medical Info</TableCell>
+                  <TableCell sx={{ fontWeight: 'bold' }}>Risk Level</TableCell>
+                  <TableCell sx={{ fontWeight: 'bold' }}>Labs</TableCell>
+                  <TableCell sx={{ fontWeight: 'bold', width: 80 }}>Action</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {filteredPatients.map((patient) => (
+                  <TableRow 
+                    key={patient._id} 
+                    selected={selectedPatient?._id === patient._id}
+                    hover
+                    sx={{ cursor: 'pointer' }}
+                    onClick={() => handlePatientSelect(patient._id)}
+                  >
+                    <TableCell>
+                      <Stack direction="row" spacing={2} alignItems="center">
+                        <Avatar sx={{ bgcolor: 'primary.main', width: 40, height: 40 }}>
+                          {patient.personalInfo.firstName[0]}{patient.personalInfo.lastName[0]}
+                        </Avatar>
+                        <Box>
+                          <Typography fontWeight="medium">
+                            {patient.personalInfo.firstName} {patient.personalInfo.lastName}
                           </Typography>
-                          <Typography variant="body2" sx={{ mb: 1 }}>
-                            <strong>Doctor:</strong> {selectedTest.doctorName}
-                          </Typography>
-                          <Typography variant="body2" sx={{ mb: 1 }}>
-                            <strong>Ordered:</strong> {format(new Date(selectedTest.orderedDate), 'MMM dd, yyyy')}
-                          </Typography>
-                          {selectedTest.completedDate && (
-                            <Typography variant="body2" sx={{ mb: 1 }}>
-                              <strong>Completed:</strong> {format(new Date(selectedTest.completedDate), 'MMM dd, yyyy')}
-                            </Typography>
-                          )}
-                          <Typography variant="body2" sx={{ mb: 1 }}>
-                            <strong>Cost:</strong> ₹{selectedTest.cost}
+                          <Typography variant="body2" color="text.secondary">
+                            {patient.age}y • {patient.personalInfo.phoneNumber}
                           </Typography>
                         </Box>
-                      </Box>
-                      
-                      {selectedTest.results && (
-                        <>
-                          <Box>
-                            <Typography variant="subtitle2" gutterBottom>
-                              AI Summary
-                            </Typography>
-                            <Box sx={{ pl: 2 }}>
-                              <Paper sx={{ p: 2, bgcolor: 'info.light', color: 'info.contrastText' }}>
-                                <Typography variant="body2">
-                                  {selectedTest.results.aiSummary || selectedTest.results.summary}
-                                </Typography>
-                              </Paper>
-                            </Box>
-                          </Box>
-                          
-                          <Box sx={{ gridColumn: '1 / -1' }}>
-                            <Typography variant="subtitle2" gutterBottom>
-                              Test Results
-                            </Typography>
-                            <TableContainer component={Paper} sx={{ mt: 1 }}>
-                              <Table size="small">
-                                <TableHead>
-                                  <TableRow>
-                                    <TableCell>Parameter</TableCell>
-                                    <TableCell>Value</TableCell>
-                                    <TableCell>Unit</TableCell>
-                                    <TableCell>Status</TableCell>
-                                  </TableRow>
-                                </TableHead>
-                                <TableBody>
-                                  {selectedTest.results.values.map((result, index) => (
-                                    <TableRow key={index}>
-                                      <TableCell>{result.parameter}</TableCell>
-                                      <TableCell>{result.value}</TableCell>
-                                      <TableCell>{result.unit}</TableCell>
-                                      <TableCell>
-                                        <Chip
-                                          label={result.status}
-                                          color={getParameterStatusColor(result.status)}
-                                          size="small"
-                                        />
-                                      </TableCell>
-                                    </TableRow>
-                                  ))}
-                                </TableBody>
-                              </Table>
-                            </TableContainer>
-                          </Box>
-                        </>
-                      )}
-                    </Box>
-                  </DialogContent>
-                  <DialogActions>
-                    <Button onClick={() => setDialogOpen(false)}>Close</Button>
-                    {selectedTest.status !== 'Completed' && (
-                      <Button
-                        variant="outlined"
-                        onClick={() => {
-                          // Update status logic
-                          setDialogOpen(false);
+                      </Stack>
+                    </TableCell>
+                    <TableCell>
+                      <Stack direction="row" gap={0.5} flexWrap="wrap">
+                        {patient.medicalInfo.bloodGroup && (
+                          <Chip label={patient.medicalInfo.bloodGroup} size="small" variant="outlined" />
+                        )}
+                        {patient.medicalInfo.chronicConditions.slice(0, 2).map((c, i) => (
+                          <Chip key={i} label={c} size="small" color="warning" />
+                        ))}
+                      </Stack>
+                    </TableCell>
+                    <TableCell>
+                      <Chip 
+                        label={patient.riskAssessment.riskLevel} 
+                        color={getRiskColor(patient.riskAssessment.riskLevel)}
+                        size="small"
+                      />
+                    </TableCell>
+                    <TableCell>{labReports.length}</TableCell>
+                    <TableCell>
+                      <IconButton 
+                        size="small"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handlePatientSelect(patient._id);
                         }}
                       >
-                        Update Status
-                      </Button>
+                        <Science />
+                      </IconButton>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </CardContent>
+      </Card>
+
+      {/* SELECTED PATIENT DASHBOARD */}
+      {selectedPatient && (
+        <Box>
+          {/* PATIENT HEADER */}
+          <Card sx={{ mb: 4 }}>
+            <CardContent>
+              <Stack direction="row" spacing={3} alignItems="center">
+                <Avatar sx={{ bgcolor: 'primary.main', width: 64, height: 64 }}>
+                  {selectedPatient.personalInfo.firstName[0]}{selectedPatient.personalInfo.lastName[0]}
+                </Avatar>
+                <Box flex={1}>
+                  <Typography variant="h4">
+                    {selectedPatient.personalInfo.firstName} {selectedPatient.personalInfo.lastName}
+                  </Typography>
+                  <Typography variant="body1" color="text.secondary">
+                    {selectedPatient.age} years • {selectedPatient.personalInfo.gender} • 
+                    {selectedPatient.personalInfo.phoneNumber}
+                  </Typography>
+                </Box>
+                <Button 
+                  variant="contained" 
+                  size="large"
+                  startIcon={<Science />}
+                  onClick={() => setLabDialogOpen(true)}
+                >
+                  Add Lab Report
+                </Button>
+              </Stack>
+            </CardContent>
+          </Card>
+
+          {/* RISK ASSESSMENT */}
+          <Card sx={{ mb: 4, borderLeft: `4px solid ${getRiskBorderColor(selectedPatient.riskAssessment.riskLevel)}` }}>
+            <CardContent>
+              <Stack direction="row" justifyContent="space-between" alignItems="center">
+                <Box>
+                  <Typography variant="h6" gutterBottom>
+                    AI Risk Assessment
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Last calculated: {new Date(selectedPatient.riskAssessment.lastCalculated).toLocaleString()}
+                  </Typography>
+                </Box>
+                <Box textAlign="right">
+                  <Typography variant="h2" color="primary">
+                    {selectedPatient.riskAssessment.riskScore}%
+                  </Typography>
+                  <Chip 
+                    label={selectedPatient.riskAssessment.riskLevel} 
+                    color={getRiskColor(selectedPatient.riskAssessment.riskLevel)}
+                    size="medium"
+                  />
+                </Box>
+              </Stack>
+
+              {/* RISK BREAKDOWN */}
+              <Divider sx={{ my: 3 }} />
+              <Stack direction="row" spacing={2} flexWrap="wrap">
+                {Object.entries(selectedPatient.riskAssessment.breakdown).map(([key, value]) => (
+                  <Paper key={key} sx={{ p: 2, textAlign: 'center', minWidth: 100 }}>
+                    <Typography variant="caption" color="text.secondary">{key}</Typography>
+                    <Typography variant="h5" fontWeight="bold">{value}%</Typography>
+                  </Paper>
+                ))}
+              </Stack>
+            </CardContent>
+          </Card>
+
+          {/* MEDICAL INFO */}
+          <Card sx={{ mb: 4 }}>
+            <CardContent>
+              <Stack direction="row" justifyContent="space-between" alignItems="center" mb={3}>
+                <Typography variant="h6">
+                  <LocalHospital sx={{ mr: 1, verticalAlign: 'middle' }} /> Medical Information
+                </Typography>
+                <Button size="small" startIcon={<Edit />} onClick={() => setMedicalDialogOpen(true)}>
+                  Edit Info
+                </Button>
+              </Stack>
+              <Divider />
+              <Box mt={3}>
+                <Stack direction="row" spacing={4}>
+                  <Box>
+                    <Typography variant="caption" color="text.secondary">Blood Group</Typography>
+                    <Typography variant="h6">{selectedPatient.medicalInfo.bloodGroup || 'N/A'}</Typography>
+                  </Box>
+                  <Box>
+                    <Typography variant="caption" color="text.secondary">Chronic Conditions</Typography>
+                    <Stack direction="row" gap={1} flexWrap="wrap">
+                      {selectedPatient.medicalInfo.chronicConditions.map((c, i) => (
+                        <Chip key={i} label={c} color="warning" size="small" />
+                      ))}
+                    </Stack>
+                  </Box>
+                  <Box>
+                    <Typography variant="caption" color="text.secondary">Allergies</Typography>
+                    <Stack direction="row" gap={1} flexWrap="wrap">
+                      {selectedPatient.medicalInfo.allergies.map((a, i) => (
+                        <Chip key={i} label={a} color="error" variant="outlined" size="small" />
+                      ))}
+                    </Stack>
+                  </Box>
+                </Stack>
+              </Box>
+            </CardContent>
+          </Card>
+
+          {/* LAB REPORTS */}
+          <Card>
+            <CardContent>
+              <Typography variant="h6" mb={3}>
+                <Science sx={{ mr: 1, verticalAlign: 'middle' }} /> Lab Reports ({labReports.length})
+              </Typography>
+              
+              <TableContainer>
+                <Table>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Test</TableCell>
+                      <TableCell>Date</TableCell>
+                      <TableCell>Status</TableCell>
+                      <TableCell>Reviewed By</TableCell>
+                      <TableCell align="right">Actions</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {labReports.map((report) => (
+                      <TableRow key={report._id} hover>
+                        <TableCell>
+                          <Stack direction="row" spacing={1} alignItems="center">
+                            {statusIcon(report.status)}
+                            <Typography fontWeight="medium">{report.testType}</Typography>
+                          </Stack>
+                        </TableCell>
+                        <TableCell>{new Date(report.testDate).toLocaleDateString()}</TableCell>
+                        <TableCell>
+                          <Chip 
+                            label={report.status} 
+                            size="small"
+                            color={
+                              report.status === 'Normal' ? 'success' :
+                              report.status === 'Critical' ? 'error' :
+                              report.status === 'Abnormal' ? 'warning' : 'default'
+                            }
+                          />
+                        </TableCell>
+                        <TableCell>{report.reviewedBy || '—'}</TableCell>
+                        <TableCell align="right">
+                          <IconButton onClick={() => handleLabEdit(report)} size="small">
+                            <Edit fontSize="small" />
+                          </IconButton>
+                          <IconButton 
+                            color="error" 
+                            size="small"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDeleteDialog(report);
+                            }}
+                          >
+                            <Delete fontSize="small" />
+                          </IconButton>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {labReports.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={5} align="center" sx={{ py: 8 }}>
+                          <Science sx={{ fontSize: 64, color: 'action.disabled', mb: 2 }} />
+                          <Typography variant="h6" color="text.secondary" mb={2}>
+                            No lab reports yet
+                          </Typography>
+                          <Button 
+                            variant="contained" 
+                            startIcon={<Add />}
+                            onClick={() => setLabDialogOpen(true)}
+                          >
+                            Add First Report
+                          </Button>
+                        </TableCell>
+                      </TableRow>
                     )}
-                    <Button
-                      variant="contained"
-                      onClick={() => {
-                        setDialogOpen(false);
-                        // Navigate to edit or add results
-                      }}
-                    >
-                      {selectedTest.results ? 'View Full Report' : 'Add Results'}
-                    </Button>
-                  </DialogActions>
-                </>
-              )}
-            </Dialog>
-          </Box>
-        }
-      />
-    </Routes>
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </CardContent>
+          </Card>
+        </Box>
+      )}
+
+      {/* LAB DIALOG */}
+      <Dialog open={labDialogOpen} onClose={() => {setLabDialogOpen(false); setEditingLab(null);}} maxWidth="md" fullWidth>
+        <DialogTitle>{editingLab ? 'Edit Lab Report' : 'New Lab Report'}</DialogTitle>
+        <DialogContent>
+          <Stack spacing={3} sx={{ mt: 2 }}>
+            <TextField 
+              label="Test Type *" 
+              value={labForm.testType} 
+              onChange={handleLabFormChange('testType')} 
+              fullWidth 
+              required 
+            />
+            <FormControl fullWidth>
+              <InputLabel>Category</InputLabel>
+              <Select 
+                value={labForm.testCategory} 
+                label="Category" 
+                onChange={(e) => setLabForm({ ...labForm, testCategory: e.target.value as string })}
+              >
+                {testCategories.map(c => <MenuItem key={c} value={c}>{c}</MenuItem>)}
+              </Select>
+            </FormControl>
+            <TextField
+              type="date"
+              label="Test Date"
+              InputLabelProps={{ shrink: true }}
+              value={labForm.testDate}
+              onChange={handleLabFormChange('testDate')}
+              inputProps={{ max: new Date().toISOString().split('T')[0] }}
+              fullWidth
+            />
+            <TextField 
+              select 
+              label="Status" 
+              value={labForm.status} 
+              onChange={handleLabFormChange('status')} 
+              fullWidth
+            >
+              <MenuItem value="Pending">Pending</MenuItem>
+              <MenuItem value="Normal">Normal</MenuItem>
+              <MenuItem value="Abnormal">Abnormal</MenuItem>
+              <MenuItem value="Critical">Critical</MenuItem>
+            </TextField>
+            <TextField 
+              label="Key Results" 
+              multiline 
+              rows={3} 
+              value={labForm.keyResults} 
+              onChange={handleLabFormChange('keyResults')} 
+              fullWidth 
+            />
+            <TextField 
+              label="Doctor Notes" 
+              multiline 
+              rows={3} 
+              value={labForm.doctorNotes} 
+              onChange={handleLabFormChange('doctorNotes')} 
+              fullWidth 
+            />
+            <TextField 
+              label="Reviewed By" 
+              value={labForm.reviewedBy} 
+              onChange={handleLabFormChange('reviewedBy')} 
+              fullWidth 
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => { setLabDialogOpen(false); setEditingLab(null); }}>Cancel</Button>
+          <Button 
+            variant="contained" 
+            startIcon={<Save />} 
+            onClick={handleLabSave} 
+            disabled={!labForm.testType || savingLab}
+          >
+            {savingLab ? 'Saving...' : (editingLab ? 'Update' : 'Create')} Report
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* MEDICAL DIALOG */}
+      <Dialog open={medicalDialogOpen} onClose={() => setMedicalDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Edit Medical Information</DialogTitle>
+        <DialogContent>
+          <Stack spacing={3} sx={{ mt: 2 }}>
+            <TextField 
+              select 
+              label="Blood Group" 
+              value={medicalForm.bloodGroup} 
+              onChange={handleBloodGroupChange} 
+              fullWidth
+            >
+              <MenuItem value="">Select...</MenuItem>
+              <MenuItem value="A+">A+</MenuItem>
+              <MenuItem value="A-">A-</MenuItem>
+              <MenuItem value="B+">B+</MenuItem>
+              <MenuItem value="B-">B-</MenuItem>
+              <MenuItem value="AB+">AB+</MenuItem>
+              <MenuItem value="AB-">AB-</MenuItem>
+              <MenuItem value="O+">O+</MenuItem>
+              <MenuItem value="O-">O-</MenuItem>
+            </TextField>
+            <Autocomplete
+              multiple 
+              freeSolo
+              options={['Penicillin', 'Peanuts', 'Latex', 'Pollen', 'Dust', 'Shellfish']}
+              value={medicalForm.allergies}
+              onChange={handleAllergiesChange}
+              renderInput={(params) => <TextField {...params} label="Allergies" />}
+            />
+            <Autocomplete
+              multiple 
+              freeSolo
+              options={['Diabetes', 'Hypertension', 'Asthma', 'COPD', 'Heart Disease']}
+              value={medicalForm.chronicConditions}
+              onChange={handleConditionsChange}
+              renderInput={(params) => <TextField {...params} label="Chronic Conditions" />}
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setMedicalDialogOpen(false)}>Cancel</Button>
+          <Button 
+            variant="contained" 
+            startIcon={<Save />} 
+            onClick={handleMedicalSave}
+            disabled={savingMedical}
+          >
+            {savingMedical ? 'Saving...' : 'Save & Recalculate Risk'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* DELETE CONFIRMATION DIALOG */}
+      <Dialog open={!!deleteDialog} onClose={() => setDeleteDialog(null)} maxWidth="sm">
+        <DialogTitle>Delete Lab Report?</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Are you sure you want to delete the lab report for "{deleteDialog?.testType}"? 
+            This action cannot be undone.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteDialog(null)}>Cancel</Button>
+          <Button 
+            color="error" 
+            onClick={() => {
+              if (deleteDialog) {
+                handleLabDelete(deleteDialog._id);
+                setDeleteDialog(null);
+              }
+            }}
+          >
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
   );
 };
 

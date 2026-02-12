@@ -8,17 +8,11 @@ const router = express.Router();
 router.get('/', async (req, res) => {
   try {
     const { page = 1, limit = 10, status = '', triageLevel = '', search = '' } = req.query;
+    const skip = (Number(page) - 1) * Number(limit);
     
     let query = {};
-    
-    if (status) {
-      query.status = status;
-    }
-    
-    if (triageLevel) {
-      query.triageLevel = triageLevel;
-    }
-    
+    if (status) query.status = status;
+    if (triageLevel) query.triageLevel = triageLevel;
     if (search) {
       query.$or = [
         { emergencyId: { $regex: search, $options: 'i' } },
@@ -26,21 +20,34 @@ router.get('/', async (req, res) => {
       ];
     }
 
-    const skip = (page - 1) * limit;
-    const emergencies = await Emergency.find(query)
-      .populate('patientId', 'firstName lastName dateOfBirth gender phone')
-      .populate('assignedDoctor', 'firstName lastName specialization')
-      .skip(skip)
-      .limit(parseInt(limit))
-      .sort({ arrivalTime: -1 });
+    const [emergencies, total] = await Promise.all([
+      Emergency.find(query)
+        .populate({
+          path: 'patientId',
+          select: 'patientId personalInfo.firstName personalInfo.lastName personalInfo.phoneNumber personalInfo.gender personalInfo.dateOfBirth'
+        })
+        .populate('assignedDoctor', 'firstName lastName specialization')
+        .skip(skip)
+        .limit(Number(limit))
+        .sort({ arrivalTime: -1 }),
+      Emergency.countDocuments(query)
+    ]);
 
-    const total = await Emergency.countDocuments(query);
+    // ✅ SAFE TRANSFORM - Prevents frontend crashes
+    const safeEmergencies = emergencies.map(emergency => ({
+      ...emergency.toObject(),
+      patientName: emergency.patientName || 'Unknown Patient',
+      patientInitials: emergency.patientId?.personalInfo 
+        ? `${emergency.patientId.personalInfo.firstName?.[0] || ''}${emergency.patientId.personalInfo.lastName?.[0] || ''}`.toUpperCase()
+        : '??',
+      patientPhone: emergency.patientId?.personalInfo?.phoneNumber || 'N/A',
+      patientGender: emergency.patientId?.personalInfo?.gender || 'N/A',
+      patientAge: emergency.patientId?.personalInfo?.dateOfBirth ? new Date().getFullYear() - new Date(emergency.patientId.personalInfo.dateOfBirth).getFullYear() : 'N/A'
+    }));
 
     res.json({
-      emergencies,
-      totalPages: Math.ceil(total / limit),
-      currentPage: parseInt(page),
-      total
+      emergencies: safeEmergencies,
+      pagination: { page: Number(page), limit: Number(limit), total, totalPages: Math.ceil(total / Number(limit)) }
     });
   } catch (error) {
     console.error('Get emergencies error:', error);
@@ -70,6 +77,20 @@ router.get('/:id', async (req, res) => {
 // Create new emergency case
 router.post('/', async (req, res) => {
   try {
+    // Validate required fields
+    if (!req.body.patientId) {
+      return res.status(400).json({ error: 'Patient ID is required' });
+    }
+    if (!req.body.chiefComplaint) {
+      return res.status(400).json({ error: 'Chief complaint is required' });
+    }
+
+    // Verify patient exists
+    const patient = await Patient.findById(req.body.patientId);
+    if (!patient) {
+      return res.status(404).json({ error: 'Patient not found with this ID' });
+    }
+
     const newEmergency = new Emergency(req.body);
     await newEmergency.save();
     
@@ -77,13 +98,27 @@ router.post('/', async (req, res) => {
       .populate('patientId', 'firstName lastName dateOfBirth gender phone')
       .populate('assignedDoctor', 'firstName lastName specialization');
 
-    // Emit real-time update
-    req.app.get('io').emit('emergency-case-created', populatedEmergency);
+    // Emit real-time update (if Socket.IO is configured)
+    if (req.app.get('io')) {
+      req.app.get('io').emit('emergency-case-created', populatedEmergency);
+    }
 
     res.status(201).json(populatedEmergency);
   } catch (error) {
     console.error('Create emergency error:', error);
-    res.status(500).json({ error: 'Failed to create emergency case' });
+    
+    // Handle validation errors
+    if (error.name === 'ValidationError') {
+      const messages = Object.values(error.errors).map(err => err.message);
+      return res.status(400).json({ error: messages.join(', ') });
+    }
+    
+    // Handle cast errors (invalid ObjectId)
+    if (error.name === 'CastError') {
+      return res.status(400).json({ error: 'Invalid patient ID format. Please select a valid patient.' });
+    }
+    
+    res.status(500).json({ error: 'Failed to create emergency case. Please try again.' });
   }
 });
 
@@ -102,11 +137,19 @@ router.put('/:id', async (req, res) => {
     }
 
     // Emit real-time update
-    req.app.get('io').emit('emergency-case-updated', emergency);
+    if (req.app.get('io')) {
+      req.app.get('io').emit('emergency-case-updated', emergency);
+    }
 
     res.json(emergency);
   } catch (error) {
     console.error('Update emergency error:', error);
+    
+    if (error.name === 'ValidationError') {
+      const messages = Object.values(error.errors).map(err => err.message);
+      return res.status(400).json({ error: messages.join(', ') });
+    }
+    
     res.status(500).json({ error: 'Failed to update emergency case' });
   }
 });
@@ -116,6 +159,10 @@ router.post('/:id/notes', async (req, res) => {
   try {
     const { note, provider } = req.body;
     
+    if (!note || !note.trim()) {
+      return res.status(400).json({ error: 'Note content is required' });
+    }
+    
     const emergency = await Emergency.findById(req.params.id);
     if (!emergency) {
       return res.status(404).json({ error: 'Emergency case not found' });
@@ -123,17 +170,19 @@ router.post('/:id/notes', async (req, res) => {
 
     emergency.treatmentNotes.push({
       note,
-      provider,
+      provider: provider || 'Staff',
       timestamp: new Date()
     });
 
     await emergency.save();
 
     // Emit real-time update
-    req.app.get('io').emit('emergency-note-added', {
-      emergencyId: emergency._id,
-      note: emergency.treatmentNotes[emergency.treatmentNotes.length - 1]
-    });
+    if (req.app.get('io')) {
+      req.app.get('io').emit('emergency-note-added', {
+        emergencyId: emergency._id,
+        note: emergency.treatmentNotes[emergency.treatmentNotes.length - 1]
+      });
+    }
 
     res.json(emergency);
   } catch (error) {
@@ -156,10 +205,12 @@ router.put('/:id/vitals', async (req, res) => {
     }
 
     // Emit real-time update
-    req.app.get('io').emit('emergency-vitals-updated', {
-      emergencyId: emergency._id,
-      vitalSigns: emergency.vitalSigns
-    });
+    if (req.app.get('io')) {
+      req.app.get('io').emit('emergency-vitals-updated', {
+        emergencyId: emergency._id,
+        vitalSigns: emergency.vitalSigns
+      });
+    }
 
     res.json(emergency);
   } catch (error) {
@@ -173,6 +224,16 @@ router.put('/:id/assign-doctor', async (req, res) => {
   try {
     const { doctorId } = req.body;
     
+    if (!doctorId) {
+      return res.status(400).json({ error: 'Doctor ID is required' });
+    }
+
+    // Verify doctor exists
+    const doctor = await Doctor.findById(doctorId);
+    if (!doctor) {
+      return res.status(404).json({ error: 'Doctor not found' });
+    }
+    
     const emergency = await Emergency.findByIdAndUpdate(
       req.params.id,
       { assignedDoctor: doctorId },
@@ -184,14 +245,21 @@ router.put('/:id/assign-doctor', async (req, res) => {
     }
 
     // Emit real-time update
-    req.app.get('io').emit('emergency-doctor-assigned', {
-      emergencyId: emergency._id,
-      doctor: emergency.assignedDoctor
-    });
+    if (req.app.get('io')) {
+      req.app.get('io').emit('emergency-doctor-assigned', {
+        emergencyId: emergency._id,
+        doctor: emergency.assignedDoctor
+      });
+    }
 
     res.json(emergency);
   } catch (error) {
     console.error('Assign doctor error:', error);
+    
+    if (error.name === 'CastError') {
+      return res.status(400).json({ error: 'Invalid doctor ID format' });
+    }
+    
     res.status(500).json({ error: 'Failed to assign doctor' });
   }
 });
@@ -200,6 +268,15 @@ router.put('/:id/assign-doctor', async (req, res) => {
 router.put('/:id/triage', async (req, res) => {
   try {
     const { triageLevel } = req.body;
+    
+    if (!triageLevel) {
+      return res.status(400).json({ error: 'Triage level is required' });
+    }
+
+    const validLevels = ['Critical', 'High', 'Medium', 'Low'];
+    if (!validLevels.includes(triageLevel)) {
+      return res.status(400).json({ error: 'Invalid triage level' });
+    }
     
     const emergency = await Emergency.findByIdAndUpdate(
       req.params.id,
@@ -212,10 +289,12 @@ router.put('/:id/triage', async (req, res) => {
     }
 
     // Emit real-time update
-    req.app.get('io').emit('emergency-triage-updated', {
-      emergencyId: emergency._id,
-      triageLevel: emergency.triageLevel
-    });
+    if (req.app.get('io')) {
+      req.app.get('io').emit('emergency-triage-updated', {
+        emergencyId: emergency._id,
+        triageLevel: emergency.triageLevel
+      });
+    }
 
     res.json(emergency);
   } catch (error) {
@@ -359,7 +438,9 @@ router.delete('/:id', async (req, res) => {
     }
 
     // Emit real-time update
-    req.app.get('io').emit('emergency-case-discharged', emergency);
+    if (req.app.get('io')) {
+      req.app.get('io').emit('emergency-case-discharged', emergency);
+    }
 
     res.json({ message: 'Emergency case discharged successfully' });
   } catch (error) {

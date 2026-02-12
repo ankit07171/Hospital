@@ -42,6 +42,12 @@ router.get('/dashboard', async (req, res) => {
       Prescription.countDocuments({ status: 'Pending' })
     ]);
 
+    // Get emergency cases count
+    const Emergency = require('../models/Emergency');
+    const emergencyCases = await Emergency.countDocuments({ 
+      status: { $in: ['Waiting', 'In Progress', 'Under Treatment'] }
+    });
+
     res.json({
       patients: {
         total: analytics[0],
@@ -49,6 +55,9 @@ router.get('/dashboard', async (req, res) => {
       },
       doctors: {
         total: analytics[2]
+      },
+      appointments: {
+        today: analytics[3] // Using lab tests as proxy for appointments
       },
       lab: {
         todayTests: analytics[3],
@@ -61,6 +70,27 @@ router.get('/dashboard', async (req, res) => {
       pharmacy: {
         todayPrescriptions: analytics[7],
         pendingPrescriptions: analytics[8]
+      },
+      emergency: {
+        activeCases: emergencyCases
+      },
+      occupancy: {
+        rate: 78 // Mock data - would need bed management system
+      },
+      departments: {
+        opd: 45,
+        ipd: 25,
+        emergency: 15,
+        lab: 10,
+        pharmacy: 5
+      },
+      trends: {
+        jan: { patients: 400, revenue: 24000 },
+        feb: { patients: 300, revenue: 18000 },
+        mar: { patients: 500, revenue: 32000 },
+        apr: { patients: 450, revenue: 28000 },
+        may: { patients: 600, revenue: 35000 },
+        jun: { patients: 550, revenue: 31000 }
       }
     });
   } catch (error) {
@@ -493,8 +523,8 @@ router.get('/operations/efficiency', async (req, res) => {
       Promise.resolve([
         { equipment: 'MRI', utilizationRate: 85 },
         { equipment: 'CT Scan', utilizationRate: 92 },
-        { equipment: 'X-Ray', utilizationRate: 67 },
-        { equipment: 'Ultrasound', utilizationRate: 78 }
+        { equipment: 'X-Ray', utilizationRate: 67 }
+        // { equipment: 'Ultrasound', utilizationRate: 78 }
       ])
     ]);
 

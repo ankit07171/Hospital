@@ -1,238 +1,307 @@
 const express = require('express');
-const LabTest = require('../models/LabTest');
-const aiService = require('../services/aiService');
 const router = express.Router();
+const LabReport = require('../models/LabTest');
+const Patient = require('../models/Patient');
+ // Add this after your imports (line 6)
+router.param('patientId', (req, res, next, id) => {
+  if (!id || id === 'undefined') return res.status(400).json({error: 'Valid patient ID required'});
+  req.patientId = id;
+  next();
+});
 
-// Get all lab tests
 router.get('/', async (req, res) => {
   try {
-    const { page = 1, limit = 10, status, patientId, date } = req.query;
-    const query = {};
+    const { status, patientId, testCategory, startDate, endDate } = req.query;
+    let query = {};
 
-    if (status) query.status = status;
-    if (patientId) query.patientId = patientId;
-    if (date) {
-      const filterDate = new Date(date);
-      query['dates.ordered'] = {
-        $gte: new Date(filterDate.setHours(0, 0, 0, 0)),
-        $lt: new Date(filterDate.setHours(23, 59, 59, 999))
-      };
+    // Filter by patient
+    if (patientId) {
+      query.patientId = patientId;
     }
 
-    const labTests = await LabTest.find(query)
-      .populate('patientId', 'personalInfo.firstName personalInfo.lastName patientId')
-      .populate('doctorId', 'personalInfo.firstName personalInfo.lastName professionalInfo.specialization')
-      .limit(limit * 1)
-      .skip((page - 1) * limit)
-      .sort({ 'dates.ordered': -1 });
+    // Filter by status
+    if (status) {
+      query.status = status;
+    }
 
-    const total = await LabTest.countDocuments(query);
+    // Filter by test category
+    if (testCategory) {
+      query.testCategory = testCategory;
+    }
 
-    res.json({
-      labTests,
-      totalPages: Math.ceil(total / limit),
-      currentPage: page,
-      total
-    });
+    // Filter by date range
+    if (startDate || endDate) {
+      query.testDate = {};
+      if (startDate) query.testDate.$gte = new Date(startDate);
+      if (endDate) query.testDate.$lte = new Date(endDate);
+    }
+
+    const labReports = await LabReport.find(query)
+      .populate('patientId', 'personalInfo.firstName personalInfo.lastName personalInfo.gender medicalInfo.bloodGroup')
+      .sort({ testDate: -1 });
+
+    res.json(labReports);
   } catch (error) {
-    console.error('Get lab tests error:', error);
-    res.status(500).json({ error: 'Failed to fetch lab tests' });
+    console.error('Error fetching lab reports:', error);
+    res.status(500).json({ error: 'Failed to fetch lab reports' });
   }
 });
 
-// Get lab test by ID
-router.get('/:id', async (req, res) => {
+// Get lab reports for a specific patient
+// WRONG (missing closing brace)
+router.get('/patient/:patientId', async (req, res) => {
   try {
-    const labTest = await LabTest.findById(req.params.id)
-      .populate('patientId', 'personalInfo.firstName personalInfo.lastName patientId')
-      .populate('doctorId', 'personalInfo.firstName personalInfo.lastName professionalInfo.specialization');
-    
-    if (!labTest) {
-      return res.status(404).json({ error: 'Lab test not found' });
+    const { patientId } = req.params;
+    if (!patientId || patientId === 'undefined') {
+      return res.status(400).json({ error: 'Patient ID required' });
     }
-
-    res.json(labTest);
-  } catch (error) {
-    console.error('Get lab test error:', error);
-    res.status(500).json({ error: 'Failed to fetch lab test' });
+    const labReports = await LabReport.find({ patientId });
+    await LabReport.populate(labReports, { path: 'patientId', select: 'personalInfo medicalInfo' });
+    res.json(labReports);
+  } catch (error) {  // ✅ ADD CLOSING BRACE
+    console.error('Error fetching patient labs:', error);
+    res.status(500).json({ error: 'Failed to fetch lab reports' });
   }
 });
 
-// Create new lab test
-router.post('/', async (req, res) => {
+
+// Get recent abnormal lab reports
+router.get('/abnormal/recent', async (req, res) => {
   try {
-    const labTest = new LabTest(req.body);
-    await labTest.save();
-
-    // Populate the created test
-    await labTest.populate('patientId', 'personalInfo.firstName personalInfo.lastName patientId');
-    await labTest.populate('doctorId', 'personalInfo.firstName personalInfo.lastName professionalInfo.specialization');
-
-    // Emit real-time update
-    req.app.get('io').emit('lab-test-created', labTest);
-
-    res.status(201).json(labTest);
+    const days = parseInt(req.query.days) || 7;
+    const abnormalReports = await LabReport.findRecentAbnormal(days);
+    res.json(abnormalReports);
   } catch (error) {
-    console.error('Create lab test error:', error);
-    res.status(500).json({ error: 'Failed to create lab test' });
+    console.error('Error fetching abnormal reports:', error);
+    res.status(500).json({ error: 'Failed to fetch abnormal reports' });
   }
 });
 
-// Update lab test status
-router.put('/:id/status', async (req, res) => {
+// Get critical lab reports
+router.get('/critical', async (req, res) => {
   try {
-    const { status } = req.body;
-    const labTest = await LabTest.findById(req.params.id);
-
-    if (!labTest) {
-      return res.status(404).json({ error: 'Lab test not found' });
-    }
-
-    labTest.status = status;
-
-    // Update relevant dates based on status
-    switch (status) {
-      case 'Sample Collected':
-        labTest.dates.sampleCollected = new Date();
-        break;
-      case 'Completed':
-        labTest.dates.completed = new Date();
-        break;
-    }
-
-    await labTest.save();
-
-    // Emit real-time update
-    req.app.get('io').emit('lab-test-status-updated', {
-      testId: labTest._id,
-      status,
-      dates: labTest.dates
-    });
-
-    res.json(labTest);
+    const criticalReports = await LabReport.findCritical();
+    res.json(criticalReports);
   } catch (error) {
-    console.error('Update lab test status error:', error);
-    res.status(500).json({ error: 'Failed to update lab test status' });
+    console.error('Error fetching critical reports:', error);
+    res.status(500).json({ error: 'Failed to fetch critical reports' });
   }
 });
 
-// Add lab results
-router.put('/:id/results', async (req, res) => {
-  try {
-    const labTest = await LabTest.findById(req.params.id);
-
-    if (!labTest) {
-      return res.status(404).json({ error: 'Lab test not found' });
-    }
-
-    labTest.results = req.body;
-    labTest.status = 'Completed';
-    labTest.dates.completed = new Date();
-    labTest.dates.reportGenerated = new Date();
-
-    // Generate AI summary for faster clinical decisions
-    if (labTest.results.values && labTest.results.values.length > 0) {
-      try {
-        const aiSummary = await aiService.generateLabReportSummary(labTest.results.values);
-        labTest.results.aiSummary = aiSummary.summary;
-        labTest.results.recommendations = aiSummary.recommendations;
-      } catch (aiError) {
-        console.error('AI summary generation failed:', aiError);
-        // Continue without AI summary
-      }
-    }
-
-    await labTest.save();
-
-    // Emit real-time update
-    req.app.get('io').emit('lab-results-added', {
-      testId: labTest._id,
-      results: labTest.results,
-      status: labTest.status
-    });
-
-    res.json(labTest);
-  } catch (error) {
-    console.error('Add lab results error:', error);
-    res.status(500).json({ error: 'Failed to add lab results' });
-  }
-});
-
-// Get pending tests
-router.get('/status/pending', async (req, res) => {
-  try {
-    const pendingTests = await LabTest.find({
-      status: { $in: ['Ordered', 'Sample Collected', 'In Progress'] }
-    })
-      .populate('patientId', 'personalInfo.firstName personalInfo.lastName patientId')
-      .populate('doctorId', 'personalInfo.firstName personalInfo.lastName')
-      .sort({ 'dates.ordered': 1 });
-
-    res.json(pendingTests);
-  } catch (error) {
-    console.error('Get pending tests error:', error);
-    res.status(500).json({ error: 'Failed to fetch pending tests' });
-  }
-});
-
-// Get lab statistics
+// Get lab report statistics
 router.get('/stats/overview', async (req, res) => {
   try {
-    const today = new Date();
-    const startOfDay = new Date(today.setHours(0, 0, 0, 0));
-    const endOfDay = new Date(today.setHours(23, 59, 59, 999));
-
-    const stats = await Promise.all([
-      LabTest.countDocuments({ 'dates.ordered': { $gte: startOfDay, $lte: endOfDay } }),
-      LabTest.countDocuments({ status: 'Ordered' }),
-      LabTest.countDocuments({ status: 'In Progress' }),
-      LabTest.countDocuments({ status: 'Completed', 'dates.completed': { $gte: startOfDay, $lte: endOfDay } }),
-      LabTest.countDocuments({ status: 'Sample Collected' })
+    const totalReports = await LabReport.countDocuments();
+    
+    const statusDistribution = await LabReport.aggregate([
+      {
+        $group: {
+          _id: '$status',
+          count: { $sum: 1 }
+        }
+      }
     ]);
 
+    const categoryDistribution = await LabReport.aggregate([
+      {
+        $group: {
+          _id: '$testCategory',
+          count: { $sum: 1 }
+        }
+      }
+    ]);
+
+    const recentReports = await LabReport.countDocuments({
+      testDate: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) }
+    });
+
     res.json({
-      todayOrdered: stats[0],
-      pending: stats[1],
-      inProgress: stats[2],
-      todayCompleted: stats[3],
-      sampleCollected: stats[4]
+      totalReports,
+      statusDistribution,
+      categoryDistribution,
+      recentReports
     });
   } catch (error) {
-    console.error('Get lab stats error:', error);
+    console.error('Error fetching lab statistics:', error);
     res.status(500).json({ error: 'Failed to fetch lab statistics' });
   }
 });
 
-// Quality control verification
-router.put('/:id/verify', async (req, res) => {
+// Get single lab report by ID
+router.get('/:id', async (req, res) => {
   try {
-    const { verifiedBy, notes } = req.body;
-    const labTest = await LabTest.findById(req.params.id);
-
-    if (!labTest) {
-      return res.status(404).json({ error: 'Lab test not found' });
+    // const labReport = await LabReport.findById(req.params.id)
+    if (!req.params.id || req.params.id === 'undefined') return res.status(400).json({error: 'ID required'});
+    const labReport = await LabReport.findById(req.params.id)
+      .populate('patientId', 'personalInfo medicalInfo riskAssessment');
+ 
+    if (!labReport) {
+      return res.status(404).json({ error: 'Lab report not found' });
     }
 
-    labTest.qualityControl = {
-      verified: true,
-      verifiedBy,
-      verificationDate: new Date(),
-      notes
-    };
+    res.json(labReport);
+  } catch (error) {
+    console.error('Error fetching lab report:', error);
+    res.status(500).json({ error: 'Failed to fetch lab report' });
+  }
+});
 
-    await labTest.save();
+// Create new lab report
+router.post('/', async (req, res) => {
+  try {
+    const labData = req.body;
 
-    // Emit real-time update
-    req.app.get('io').emit('lab-test-verified', {
-      testId: labTest._id,
-      verifiedBy,
-      verificationDate: labTest.qualityControl.verificationDate
+    // Validate required fields
+    if (!labData.patientId || !labData.testType) {
+      return res.status(400).json({ 
+        error: 'Missing required fields',
+        required: ['patientId', 'testType']
+      });
+    }
+
+    // Verify patient exists
+    const patient = await Patient.findById(labData.patientId);
+    if (!patient) {
+      return res.status(404).json({ error: 'Patient not found' });
+    }
+
+    // Create lab report
+    const labReport = new LabReport({
+      ...labData,
+      testDate: labData.testDate || new Date()
     });
 
-    res.json(labTest);
+    await labReport.save();
+
+    // Risk assessment will be automatically updated via middleware
+
+    // Populate patient data before returning
+    await labReport.populate('patientId', 'personalInfo.firstName personalInfo.lastName');
+
+    res.status(201).json(labReport);
   } catch (error) {
-    console.error('Verify lab test error:', error);
-    res.status(500).json({ error: 'Failed to verify lab test' });
+    console.error('Error creating lab report:', error);
+    res.status(500).json({ 
+      error: 'Failed to create lab report',
+      details: error.message 
+    });
+  }
+});
+
+// Update lab report
+router.put('/:id', async (req, res) => {
+  try {
+    const labReport = await LabReport.findById(req.params.id);
+    
+    if (!labReport) {
+      return res.status(404).json({ error: 'Lab report not found' });
+    }
+
+    // Update fields
+    Object.assign(labReport, req.body);
+    labReport.updatedAt = new Date();
+
+    await labReport.save();
+
+    // Risk assessment will be automatically updated via middleware
+
+    await labReport.populate('patientId', 'personalInfo.firstName personalInfo.lastName');
+
+    res.json(labReport);
+  } catch (error) {
+    console.error('Error updating lab report:', error);
+    res.status(500).json({ 
+      error: 'Failed to update lab report',
+      details: error.message 
+    });
+  }
+});
+
+// Update lab report status only
+router.patch('/:id/status', async (req, res) => {
+  try {
+    const { status } = req.body;
+
+    if (!status || !['Normal', 'Abnormal', 'Critical', 'Pending'].includes(status)) {
+      return res.status(400).json({ 
+        error: 'Invalid status',
+        validStatuses: ['Normal', 'Abnormal', 'Critical', 'Pending']
+      });
+    }
+
+    const labReport = await LabReport.findById(req.params.id);
+    
+    if (!labReport) {
+      return res.status(404).json({ error: 'Lab report not found' });
+    }
+
+    labReport.status = status;
+    labReport.updatedAt = new Date();
+
+    await labReport.save();
+
+    // Risk assessment will be automatically updated via middleware
+
+    res.json(labReport);
+  } catch (error) {
+    console.error('Error updating lab report status:', error);
+    res.status(500).json({ 
+      error: 'Failed to update lab report status',
+      details: error.message 
+    });
+  }
+});
+
+// Delete lab report
+router.delete('/:id', async (req, res) => {
+  try {
+    const labReport = await LabReport.findByIdAndDelete(req.params.id);
+    
+    if (!labReport) {
+      return res.status(404).json({ error: 'Lab report not found' });
+    }
+
+    // Risk assessment will be automatically updated via middleware
+
+    res.json({ message: 'Lab report deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting lab report:', error);
+    res.status(500).json({ error: 'Failed to delete lab report' });
+  }
+});
+
+// Bulk delete lab reports
+router.post('/bulk-delete', async (req, res) => {
+  try {
+    const { reportIds } = req.body;
+
+    if (!reportIds || !Array.isArray(reportIds) || reportIds.length === 0) {
+      return res.status(400).json({ error: 'Invalid or empty reportIds array' });
+    }
+
+    // Get unique patient IDs before deletion
+    const reports = await LabReport.find({ _id: { $in: reportIds } });
+    const patientIds = [...new Set(reports.map(r => r.patientId.toString()))];
+
+    // Delete reports
+    const result = await LabReport.deleteMany({ _id: { $in: reportIds } });
+
+    // Update risk for affected patients
+    for (const patientId of patientIds) {
+      const patient = await Patient.findById(patientId);
+      if (patient) {
+        await patient.updateRiskAssessment();
+      }
+    }
+
+    res.json({ 
+      message: 'Lab reports deleted successfully',
+      deletedCount: result.deletedCount,
+      affectedPatients: patientIds.length
+    });
+  } catch (error) {
+    console.error('Error bulk deleting lab reports:', error);
+    res.status(500).json({ error: 'Failed to bulk delete lab reports' });
   }
 });
 

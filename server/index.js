@@ -13,10 +13,10 @@ const appointmentRoutes = require('./routes/appointments');
 const labRoutes = require('./routes/lab');
 const pharmacyRoutes = require('./routes/pharmacy');
 const billingRoutes = require('./routes/billing');
-const inventoryRoutes = require('./routes/inventory');
 const analyticsRoutes = require('./routes/analytics');
 const ocrRoutes = require('./routes/ocr');
 const emergencyRoutes = require('./routes/emergency');
+const medicalImagingRoutes = require('./routes/medicalImaging');
 
 dotenv.config();
 
@@ -58,10 +58,10 @@ app.use('/api/appointments', appointmentRoutes);
 app.use('/api/lab', labRoutes);
 app.use('/api/pharmacy', pharmacyRoutes);
 app.use('/api/billing', billingRoutes);
-app.use('/api/inventory', inventoryRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/ocr', ocrRoutes);
 app.use('/api/emergency', emergencyRoutes);
+app.use('/api/medical-imaging', medicalImagingRoutes);
 
 // MongoDB connection
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/lifeline-x-his', {

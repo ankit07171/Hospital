@@ -36,81 +36,170 @@ import {
   Pie,
   Cell,
 } from 'recharts';
+import axios from '../../api/axios';
 
-// Mock data
-const mockStats = {
-  totalPatients: 1247,
-  todayAppointments: 23,
-  pendingLabTests: 15,
-  totalRevenue: 125000,
-  occupancyRate: 78,
-  emergencyCases: 3,
-};
+interface DashboardStats {
+  totalPatients: number;
+  todayAppointments: number;
+  pendingLabTests: number;
+  totalRevenue: number;
+  occupancyRate: number;
+  emergencyCases: number;
+}
 
-const mockRecentActivities = [
-  {
-    id: 1,
-    type: 'patient',
-    message: 'New patient registered: John Doe',
-    time: '5 minutes ago',
-    status: 'success',
-  },
-  {
-    id: 2,
-    type: 'lab',
-    message: 'Lab report ready for PAT001234',
-    time: '12 minutes ago',
-    status: 'info',
-  },
-  {
-    id: 3,
-    type: 'emergency',
-    message: 'Emergency case admitted to ICU',
-    time: '25 minutes ago',
-    status: 'warning',
-  },
-  {
-    id: 4,
-    type: 'billing',
-    message: 'Payment received: ₹15,000',
-    time: '1 hour ago',
-    status: 'success',
-  },
-];
+interface Activity {
+  id: string;
+  type: string;
+  message: string;
+  time: string;
+  status: string;
+}
 
-const mockChartData = [
-  { name: 'Jan', patients: 400, revenue: 24000 },
-  { name: 'Feb', patients: 300, revenue: 18000 },
-  { name: 'Mar', patients: 500, revenue: 32000 },
-  { name: 'Apr', patients: 450, revenue: 28000 },
-  { name: 'May', patients: 600, revenue: 35000 },
-  { name: 'Jun', patients: 550, revenue: 31000 },
-];
+interface ChartData {
+  name: string;
+  patients: number;
+  revenue: number;
+}
 
-const mockDepartmentData = [
-  { name: 'OPD', value: 45, color: '#1976d2' },
-  { name: 'IPD', value: 25, color: '#dc004e' },
-  { name: 'Emergency', value: 15, color: '#ff9800' },
-  { name: 'Lab', value: 10, color: '#4caf50' },
-  { name: 'Pharmacy', value: 5, color: '#9c27b0' },
-];
+interface DepartmentData {
+  name: string;
+  value: number;
+  color: string;
+}
 
 const Dashboard: React.FC = () => {
-  const [stats, setStats] = useState(mockStats);
-  const [activities, setActivities] = useState(mockRecentActivities);
+  const [stats, setStats] = useState<DashboardStats>({
+    totalPatients: 0,
+    todayAppointments: 0,
+    pendingLabTests: 0,
+    totalRevenue: 0,
+    occupancyRate: 0,
+    emergencyCases: 0,
+  });
+  const [activities, setActivities] = useState<Activity[]>([]);
+  const [chartData, setChartData] = useState<ChartData[]>([]);
+  const [departmentData, setDepartmentData] = useState<DepartmentData[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Simulate real-time updates
+    fetchDashboardData();
+    
+    // Set up real-time updates
     const interval = setInterval(() => {
-      setStats(prev => ({
-        ...prev,
-        todayAppointments: prev.todayAppointments + Math.floor(Math.random() * 2),
-        totalRevenue: prev.totalRevenue + Math.floor(Math.random() * 1000),
-      }));
-    }, 30000);
+      fetchDashboardData();
+    }, 30000); // Refresh every 30 seconds
 
     return () => clearInterval(interval);
   }, []);
+
+  const fetchDashboardData = async () => {
+    try {
+      setLoading(true);
+      
+      // Fetch dashboard analytics
+      const [
+        analyticsResponse,
+        patientsResponse,
+        appointmentsResponse,
+        labResponse,
+        emergencyResponse,
+        billingResponse
+      ] = await Promise.all([
+        axios.get('/api/analytics/dashboard'),
+        axios.get('/api/patients', { params: { limit: 5 } }),
+        axios.get('/api/appointments', { params: { limit: 10 } }),
+        axios.get('/api/lab', { params: { status: 'Pending', limit: 5 } }),
+        axios.get('/api/emergency', { params: { limit: 5 } }),
+        axios.get('/api/billing', { params: { limit: 5 } })
+      ]);
+
+      // Update stats
+      const analytics = analyticsResponse.data;
+      setStats({
+        totalPatients: analytics.patients?.total || 0,
+        todayAppointments: analytics.appointments?.today || 0,
+        pendingLabTests: analytics.lab?.pendingTests || 0,
+        totalRevenue: analytics.revenue?.thisMonth || 0,
+        occupancyRate: analytics.occupancy?.rate || 0,
+        emergencyCases: analytics.emergency?.activeCases || 0,
+      });
+
+      // Update recent activities
+      const recentActivities: Activity[] = [];
+      
+      // Add patient activities
+      patientsResponse.data.patients?.slice(0, 2).forEach((patient: any, index: number) => {
+        recentActivities.push({
+          id: `patient-${patient._id}`,
+          type: 'patient',
+          message: `New patient registered: ${patient.personalInfo.firstName} ${patient.personalInfo.lastName}`,
+          time: getRelativeTime(patient.createdAt),
+          status: 'success'
+        });
+      });
+
+      // Add lab activities
+      labResponse.data.tests?.slice(0, 2).forEach((test: any) => {
+        recentActivities.push({
+          id: `lab-${test._id}`,
+          type: 'lab',
+          message: `Lab test ${test.status.toLowerCase()}: ${test.testDetails.name}`,
+          time: getRelativeTime(test.dates.ordered),
+          status: 'info'
+        });
+      });
+
+      // Add emergency activities
+      emergencyResponse.data.emergencies?.slice(0, 1).forEach((emergency: any) => {
+        recentActivities.push({
+          id: `emergency-${emergency._id}`,
+          type: 'emergency',
+          message: `Emergency case: ${emergency.chiefComplaint}`,
+          time: getRelativeTime(emergency.arrivalTime),
+          status: emergency.triageLevel === 'Critical' ? 'error' : 'warning'
+        });
+      });
+
+      setActivities(recentActivities.slice(0, 4));
+
+      // Update chart data (last 6 months)
+      const chartData = [
+        { name: 'Jan', patients: analytics.trends?.jan?.patients || 400, revenue: analytics.trends?.jan?.revenue || 24000 },
+        { name: 'Feb', patients: analytics.trends?.feb?.patients || 300, revenue: analytics.trends?.feb?.revenue || 18000 },
+        { name: 'Mar', patients: analytics.trends?.mar?.patients || 500, revenue: analytics.trends?.mar?.revenue || 32000 },
+        { name: 'Apr', patients: analytics.trends?.apr?.patients || 450, revenue: analytics.trends?.apr?.revenue || 28000 },
+        { name: 'May', patients: analytics.trends?.may?.patients || 600, revenue: analytics.trends?.may?.revenue || 35000 },
+        { name: 'Jun', patients: analytics.trends?.jun?.patients || 550, revenue: analytics.trends?.jun?.revenue || 31000 },
+      ];
+      setChartData(chartData);
+
+      // Update department data
+      const departmentData = [
+        { name: 'OPD', value: analytics.departments?.opd || 45, color: '#1976d2' },
+        { name: 'IPD', value: analytics.departments?.ipd || 25, color: '#dc004e' },
+        { name: 'Emergency', value: analytics.departments?.emergency || 15, color: '#ff9800' },
+        { name: 'Lab', value: analytics.departments?.lab || 10, color: '#4caf50' },
+        { name: 'Pharmacy', value: analytics.departments?.pharmacy || 5, color: '#9c27b0' },
+      ];
+      setDepartmentData(departmentData);
+
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getRelativeTime = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffInMinutes = Math.floor((now.getTime() - date.getTime()) / (1000 * 60));
+    
+    if (diffInMinutes < 1) return 'Just now';
+    if (diffInMinutes < 60) return `${diffInMinutes} minutes ago`;
+    if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)} hours ago`;
+    return `${Math.floor(diffInMinutes / 1440)} days ago`;
+  };
 
   const StatCard = ({ title, value, icon, color, trend }: any) => (
     <Card sx={{ height: '100%', minHeight: 120 }}>
@@ -233,7 +322,7 @@ const Dashboard: React.FC = () => {
                 Patient & Revenue Trends
               </Typography>
               <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={mockChartData}>
+                <LineChart data={chartData}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="name" />
                   <YAxis yAxisId="left" />
@@ -271,7 +360,7 @@ const Dashboard: React.FC = () => {
               <ResponsiveContainer width="100%" height={300}>
                 <PieChart>
                   <Pie
-                    data={mockDepartmentData}
+                    data={departmentData}
                     cx="50%"
                     cy="50%"
                     innerRadius={60}
@@ -279,7 +368,7 @@ const Dashboard: React.FC = () => {
                     paddingAngle={5}
                     dataKey="value"
                   >
-                    {mockDepartmentData.map((entry, index) => (
+                    {departmentData.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
                   </Pie>
@@ -287,7 +376,7 @@ const Dashboard: React.FC = () => {
                 </PieChart>
               </ResponsiveContainer>
               <Box sx={{ mt: 2 }}>
-                {mockDepartmentData.map((item) => (
+                {departmentData.map((item) => (
                   <Chip
                     key={item.name}
                     label={`${item.name}: ${item.value}%`}

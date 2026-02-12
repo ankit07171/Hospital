@@ -21,7 +21,6 @@ import {
   Receipt,
   CameraAlt,
   Analytics,
-  Inventory,
   Emergency,
 } from '@mui/icons-material';
 
@@ -46,16 +45,15 @@ interface SidebarProps {
 
 // src/components/Layout/Sidebar.tsx
 const menuItems = [
-  { text: 'Dashboard', icon: <Dashboard />, path: '/app/dashboard' },  // ✅ Fixed
-  { text: 'Patients', icon: <People />, path: '/app/patients' },       // ✅ Fixed
-  { text: 'Doctors', icon: <LocalHospital />, path: '/app/doctors' },  // ✅ Fixed
+  { text: 'Dashboard', icon: <Dashboard />, path: '/app/dashboard' },
+  { text: 'Patients', icon: <People />, path: '/app/patients' },
+  { text: 'Doctors', icon: <LocalHospital />, path: '/app/doctors' },
   { text: 'Appointments', icon: <EventNote />, path: '/app/appointments' },
   { text: 'Laboratory', icon: <Science />, path: '/app/lab' },
   { text: 'Pharmacy', icon: <LocalPharmacy />, path: '/app/pharmacy' },
   { text: 'Billing', icon: <Receipt />, path: '/app/billing' },
-  { text: 'OCR Tools', icon: <CameraAlt />, path: '/app/ocr' },
+  { text: 'Medical Imaging', icon: <CameraAlt />, path: '/app/ocr' },
   { text: 'Analytics', icon: <Analytics />, path: '/app/analytics' },
-  { text: 'Inventory', icon: <Inventory />, path: '/app/inventory' },
   { text: 'Emergency', icon: <Emergency />, path: '/app/emergency' },
 ];
 

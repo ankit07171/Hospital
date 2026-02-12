@@ -1,279 +1,430 @@
-const axios = require('axios');
+// class MLRiskEvaluator {
 
-class AIService {
+//   constructor() {
+//     this.weights = {
+//       age: 0.20,
+//       conditions: 0.30,
+//       labs: 0.35,
+//       allergies: 0.10,
+//       interactions: 0.05
+//     };
+//   }
+
+//   /**
+//    * Main risk evaluation function
+//    * Called whenever patient data or lab results are updated
+//    */
+//   evaluateRisk(patientData) {
+//     try {
+//       const age = this.calculateAge(patientData.personalInfo.dateOfBirth);
+//       const conditions = patientData.medicalInfo.chronicConditions || [];
+//       const labTests = patientData.labReports || [];
+//       const allergies = patientData.medicalInfo.allergies || [];
+
+//       // Calculate individual risk components
+//       const ageRisk = this.calculateAgeRisk(age);
+//       const conditionsRisk = this.calculateConditionsRisk(conditions);
+//       const labsRisk = this.calculateLabRisk(labTests);
+//       const allergiesRisk = this.calculateAllergiesRisk(allergies);
+//       const interactionRisk = this.calculateInteractionRisk(conditions, labTests);
+
+//       // Weighted total risk
+//       const totalRisk = (
+//         ageRisk * this.weights.age +
+//         conditionsRisk * this.weights.conditions +
+//         labsRisk * this.weights.labs +
+//         allergiesRisk * this.weights.allergies +
+//         interactionRisk * this.weights.interactions
+//       );
+
+//       const riskScore = Math.min(Math.round(totalRisk * 100), 100);
+      
+//       return {
+//         riskScore,
+//         riskLevel: this.getRiskLevel(riskScore),
+//         breakdown: {
+//           age: Math.round(ageRisk * 100),
+//           conditions: Math.round(conditionsRisk * 100),
+//           labs: Math.round(labsRisk * 100),
+//           allergies: Math.round(allergiesRisk * 100),
+//           interactions: Math.round(interactionRisk * 100)
+//         },
+//         riskFactors: this.identifyRiskFactors(patientData, age, labTests),
+//         recommendations: this.generateRecommendations(riskScore, conditions, labTests),
+//         modelVersion: 'v2.0.1',
+//         confidence: 0.89,
+//         calculatedAt: new Date().toISOString()
+//       };
+//     } catch (error) {
+//       console.error('Risk evaluation error:', error);
+//       return {
+//         riskScore: 0,
+//         riskLevel: 'Unknown',
+//         error: error.message,
+//         calculatedAt: new Date().toISOString()
+//       };
+//     }
+//   }
+
+//   calculateAge(dateOfBirth) {
+//     const today = new Date();
+//     const birthDate = new Date(dateOfBirth);
+//     let age = today.getFullYear() - birthDate.getFullYear();
+//     const monthDiff = today.getMonth() - birthDate.getMonth();
+    
+//     if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+//       age--;
+//     }
+    
+//     return age;
+//   }
+
+//   calculateAgeRisk(age) {
+//     if (age < 18) return 0.05;
+//     if (age < 30) return 0.10;
+//     if (age < 45) return 0.15;
+//     if (age < 60) return 0.25;
+//     if (age < 75) return 0.40;
+//     return 0.60;
+//   }
+
+//   calculateConditionsRisk(conditions) {
+//     if (!conditions || conditions.length === 0) return 0;
+
+//     const severityMap = {
+//       'diabetes': 0.35,
+//       'heart disease': 0.45,
+//       'hypertension': 0.30,
+//       'kidney disease': 0.40,
+//       'liver disease': 0.38,
+//       'cancer': 0.50,
+//       'stroke': 0.45,
+//       'copd': 0.35,
+//       'asthma': 0.20,
+//       'arthritis': 0.15,
+//       'depression': 0.20,
+//       'anxiety': 0.15
+//     };
+
+//     let totalRisk = 0;
+//     let matchedConditions = 0;
+
+//     conditions.forEach(condition => {
+//       const normalizedCondition = condition.toLowerCase();
+//       const severity = severityMap[normalizedCondition] || 0.15;
+//       totalRisk += severity;
+//       matchedConditions++;
+//     });
+
+//     // Additional penalty for multiple conditions
+//     if (matchedConditions > 1) {
+//       totalRisk *= 1.1;
+//     }
+//     if (matchedConditions > 3) {
+//       totalRisk *= 1.15;
+//     }
+
+//     return Math.min(totalRisk, 1);
+//   }
+
+//   calculateLabRisk(labTests) {
+//     if (!labTests || labTests.length === 0) return 0;
+
+//     let totalRisk = 0;
+//     let abnormalCount = 0;
+
+//     labTests.forEach(test => {
+//       // Check test status
+//       if (test.status === 'Critical' || test.status === 'Abnormal') {
+//         abnormalCount++;
+        
+//         // Base risk from status
+//         let testRisk = test.status === 'Critical' ? 0.40 : 0.25;
+
+//         // Additional risk from specific test types
+//         const testType = test.testType?.toLowerCase() || '';
+        
+//         if (testType.includes('glucose') || testType.includes('hba1c')) {
+//           testRisk *= 1.3;
+//         } else if (testType.includes('cholesterol') || testType.includes('lipid')) {
+//           testRisk *= 1.2;
+//         } else if (testType.includes('kidney') || testType.includes('creatinine')) {
+//           testRisk *= 1.25;
+//         } else if (testType.includes('liver') || testType.includes('alt') || testType.includes('ast')) {
+//           testRisk *= 1.2;
+//         }
+
+//         totalRisk += testRisk;
+//       }
+//     });
+
+//     // Average risk with penalty for multiple abnormal tests
+//     let avgRisk = totalRisk / Math.max(labTests.length, 1);
+    
+//     if (abnormalCount > 2) {
+//       avgRisk *= 1.2;
+//     }
+//     if (abnormalCount > 4) {
+//       avgRisk *= 1.3;
+//     }
+
+//     return Math.min(avgRisk, 1);
+//   }
+
+//   calculateAllergiesRisk(allergies) {
+//     if (!allergies || allergies.length === 0) return 0;
+
+//     const severeAllergies = [
+//       'penicillin',
+//       'sulfa',
+//       'latex',
+//       'shellfish',
+//       'peanuts',
+//       'bee sting'
+//     ];
+
+//     let riskScore = allergies.length * 0.05;
+
+//     allergies.forEach(allergy => {
+//       const normalizedAllergy = allergy.toLowerCase();
+//       if (severeAllergies.some(severe => normalizedAllergy.includes(severe))) {
+//         riskScore += 0.10;
+//       }
+//     });
+
+//     return Math.min(riskScore, 0.50);
+//   }
+
+//   calculateInteractionRisk(conditions, labTests) {
+//     let interactionRisk = 0;
+
+//     const highRiskConditions = ['diabetes', 'heart disease', 'hypertension', 'kidney disease'];
+//     const criticalLabStatuses = ['Critical', 'Abnormal'];
+
+//     // Check for condition-lab interactions
+//     highRiskConditions.forEach(highRiskCondition => {
+//       if (conditions.some(c => c.toLowerCase().includes(highRiskCondition))) {
+//         interactionRisk += 0.10;
+
+//         // Additional risk if labs are also abnormal
+//         labTests.forEach(test => {
+//           if (criticalLabStatuses.includes(test.status)) {
+//             interactionRisk += 0.05;
+//           }
+//         });
+//       }
+//     });
+
+//     // Multiple condition interaction
+//     if (conditions.length > 2) {
+//       interactionRisk += 0.10;
+//     }
+
+//     return Math.min(interactionRisk, 1);
+//   }
+
+//   identifyRiskFactors(patientData, age, labTests) {
+//     const factors = [];
+//     const conditions = patientData.medicalInfo.chronicConditions || [];
+//     const allergies = patientData.medicalInfo.allergies || [];
+
+//     // Age-based factors
+//     if (age > 65) {
+//       factors.push({
+//         factor: 'Advanced Age',
+//         severity: 'Medium',
+//         description: `Patient is ${age} years old, increasing health risks`
+//       });
+//     }
+
+//     // Condition-based factors
+//     if (conditions.length > 0) {
+//       if (conditions.length > 2) {
+//         factors.push({
+//           factor: 'Multiple Chronic Conditions',
+//           severity: 'High',
+//           description: `Patient has ${conditions.length} chronic conditions: ${conditions.join(', ')}`
+//         });
+//       } else {
+//         factors.push({
+//           factor: 'Chronic Condition',
+//           severity: 'Medium',
+//           description: `Diagnosed with: ${conditions.join(', ')}`
+//         });
+//       }
+//     }
+
+//     // Lab-based factors
+//     const criticalLabs = labTests.filter(t => t.status === 'Critical');
+//     const abnormalLabs = labTests.filter(t => t.status === 'Abnormal');
+
+//     if (criticalLabs.length > 0) {
+//       factors.push({
+//         factor: 'Critical Lab Results',
+//         severity: 'High',
+//         description: `${criticalLabs.length} critical lab result(s) detected`
+//       });
+//     }
+
+//     if (abnormalLabs.length > 2) {
+//       factors.push({
+//         factor: 'Multiple Abnormal Lab Results',
+//         severity: 'Medium',
+//         description: `${abnormalLabs.length} abnormal test results`
+//       });
+//     }
+
+//     // Allergy-based factors
+//     if (allergies.length > 3) {
+//       factors.push({
+//         factor: 'Multiple Allergies',
+//         severity: 'Low',
+//         description: `Patient has ${allergies.length} known allergies`
+//       });
+//     }
+
+//     return factors;
+//   }
+
+//   generateRecommendations(riskScore, conditions, labTests) {
+//     const recommendations = [];
+
+//     // Risk-based recommendations
+//     if (riskScore >= 70) {
+//       recommendations.push({
+//         priority: 'High',
+//         action: 'Immediate Medical Review Required',
+//         description: 'Schedule urgent consultation with primary care physician'
+//       });
+//       recommendations.push({
+//         priority: 'High',
+//         action: 'Enhanced Monitoring',
+//         description: 'Implement daily vital signs monitoring and weekly check-ins'
+//       });
+//     } else if (riskScore >= 50) {
+//       recommendations.push({
+//         priority: 'Medium',
+//         action: 'Regular Medical Follow-up',
+//         description: 'Schedule appointment within 2 weeks for health assessment'
+//       });
+//       recommendations.push({
+//         priority: 'Medium',
+//         action: 'Lifestyle Modification',
+//         description: 'Implement diet and exercise plan with medical supervision'
+//       });
+//     } else if (riskScore >= 30) {
+//       recommendations.push({
+//         priority: 'Low',
+//         action: 'Routine Check-up',
+//         description: 'Schedule regular 3-month follow-up appointment'
+//       });
+//       recommendations.push({
+//         priority: 'Low',
+//         action: 'Preventive Care',
+//         description: 'Maintain healthy lifestyle and monitor symptoms'
+//       });
+//     }
+
+//     // Condition-specific recommendations
+//     if (conditions.includes('Diabetes')) {
+//       recommendations.push({
+//         priority: 'Medium',
+//         action: 'Diabetes Management',
+//         description: 'Regular glucose monitoring and HbA1c testing every 3 months'
+//       });
+//     }
+
+//     if (conditions.includes('Hypertension')) {
+//       recommendations.push({
+//         priority: 'Medium',
+//         action: 'Blood Pressure Monitoring',
+//         description: 'Daily blood pressure checks and medication compliance review'
+//       });
+//     }
+
+//     // Lab-based recommendations
+//     const criticalLabs = labTests.filter(t => t.status === 'Critical');
+//     if (criticalLabs.length > 0) {
+//       recommendations.push({
+//         priority: 'High',
+//         action: 'Lab Result Follow-up',
+//         description: `Review and address critical findings in: ${criticalLabs.map(l => l.testType).join(', ')}`
+//       });
+//     }
+
+//     return recommendations;
+//   }
+
+//   getRiskLevel(riskScore) {
+//     if (riskScore >= 75) return 'Critical';
+//     if (riskScore >= 50) return 'High';
+//     if (riskScore >= 30) return 'Medium';
+//     if (riskScore >= 15) return 'Low';
+//     return 'Minimal';
+//   }
+// }
+
+// module.exports = new MLRiskEvaluator();
+
+
+// services/aiService.js
+// const MLRiskEvaluator = require('./MLRiskEvaluator');
+// module.exports = { evaluateRisk: (data) => MLRiskEvaluator.evaluateRisk(data) };
+
+
+
+
+// server/services/aiService.js
+class MLRiskEvaluator {
   constructor() {
-    this.aiServiceUrl = process.env.AI_SERVICE_URL || 'http://localhost:8000';
-    this.healthPredictionUrl = process.env.HEALTH_PREDICTION_API || 'http://localhost:8001';
-  }
-
-  async generateLabReportSummary(labResults) {
-    try {
-      // Simulate AI-based lab report summary generation
-      const abnormalResults = labResults.filter(result => 
-        result.status === 'High' || result.status === 'Low' || result.status === 'Critical'
-      );
-
-      let summary = 'Lab Report Summary:\n\n';
-
-      if (abnormalResults.length === 0) {
-        summary += 'All parameters are within normal ranges. No immediate concerns identified.';
-      } else {
-        summary += 'Key Findings:\n';
-        abnormalResults.forEach(result => {
-          summary += `• ${result.parameter}: ${result.value} ${result.unit} (${result.status}) - Normal range: ${result.normalRange}\n`;
-        });
-
-        // Add clinical recommendations based on abnormal values
-        summary += '\nClinical Recommendations:\n';
-        abnormalResults.forEach(result => {
-          const recommendation = this.getRecommendationForParameter(result);
-          if (recommendation) {
-            summary += `• ${recommendation}\n`;
-          }
-        });
-      }
-
-      return {
-        summary,
-        abnormalCount: abnormalResults.length,
-        totalParameters: labResults.length,
-        riskLevel: this.calculateRiskLevel(abnormalResults),
-        recommendations: this.generateRecommendations(abnormalResults)
-      };
-    } catch (error) {
-      console.error('AI lab summary generation failed:', error);
-      return {
-        summary: 'Unable to generate AI summary at this time.',
-        error: error.message
-      };
-    }
-  }
-
-  getRecommendationForParameter(result) {
-    const recommendations = {
-      'Hemoglobin': {
-        'Low': 'Consider iron supplementation and dietary counseling',
-        'High': 'Investigate for polycythemia, recommend hydration'
-      },
-      'Blood Sugar': {
-        'High': 'Monitor for diabetes, recommend dietary modifications',
-        'Low': 'Check for hypoglycemia, adjust medication if needed'
-      },
-      'Cholesterol': {
-        'High': 'Recommend lipid-lowering therapy and lifestyle changes',
-        'Low': 'Generally not concerning unless extremely low'
-      },
-      'Blood Pressure': {
-        'High': 'Monitor cardiovascular risk, consider antihypertensive therapy',
-        'Low': 'Monitor for hypotension symptoms'
-      }
+    this.weights = { 
+      age: 0.20, 
+      conditions: 0.30, 
+      labs: 0.35, 
+      allergies: 0.10, 
+      interactions: 0.05 
     };
-
-    return recommendations[result.parameter]?.[result.status] || 
-           `Monitor ${result.parameter} levels and consider follow-up testing`;
   }
 
-  calculateRiskLevel(abnormalResults) {
-    if (abnormalResults.length === 0) return 'Low';
-    
-    const criticalCount = abnormalResults.filter(r => r.status === 'Critical').length;
-    if (criticalCount > 0) return 'Critical';
-    
-    if (abnormalResults.length > 3) return 'High';
-    if (abnormalResults.length > 1) return 'Medium';
-    return 'Low';
-  }
-
-  generateRecommendations(abnormalResults) {
-    const recommendations = [];
-    
-    if (abnormalResults.some(r => r.parameter.includes('Sugar') || r.parameter.includes('Glucose'))) {
-      recommendations.push('Schedule endocrinology consultation');
-      recommendations.push('Implement diabetic diet plan');
+  calculateAge(dateOfBirth) {
+    const today = new Date();
+    const birthDate = new Date(dateOfBirth);
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
     }
+    return age;
+  }
+
+  evaluateRisk(patientData) {
+    const age = this.calculateAge(patientData.personalInfo.dateOfBirth);
+    const ageScore = Math.min(age / 80 * 100, 100) * this.weights.age;
     
-    if (abnormalResults.some(r => r.parameter.includes('Cholesterol') || r.parameter.includes('Lipid'))) {
-      recommendations.push('Cardiology referral recommended');
-      recommendations.push('Lifestyle modification counseling');
-    }
+    const conditionsScore = patientData.medicalInfo.chronicConditions?.length * 15 || 0;
+    const allergiesScore = patientData.medicalInfo.allergies?.length * 8 || 0;
     
-    if (abnormalResults.some(r => r.parameter.includes('Hemoglobin') || r.parameter.includes('Iron'))) {
-      recommendations.push('Hematology consultation if persistent');
-      recommendations.push('Nutritional assessment');
-    }
+    const riskScore = Math.min(ageScore + conditionsScore + allergiesScore, 100);
+    const riskLevel = riskScore > 80 ? 'Critical' : riskScore > 60 ? 'High' : riskScore > 40 ? 'Medium' : 'Low';
 
-    return recommendations;
-  }
-
-  async predictHealthScore(patientData) {
-    try {
-      // Simulate health score prediction based on patient data
-      const factors = {
-        age: this.calculateAgeScore(patientData.age),
-        chronicConditions: this.calculateChronicConditionsScore(patientData.chronicConditions || []),
-        labResults: this.calculateLabScore(patientData.recentLabResults || []),
-        lifestyle: this.calculateLifestyleScore(patientData.lifestyle || {}),
-        vitals: this.calculateVitalsScore(patientData.vitals || {})
-      };
-
-      const baseScore = 100;
-      const totalDeduction = Object.values(factors).reduce((sum, score) => sum + score, 0);
-      const healthScore = Math.max(0, Math.min(100, baseScore - totalDeduction));
-
-      const riskFactors = this.identifyRiskFactors(patientData, factors);
-      const predictions = await this.generateHealthPredictions(patientData, healthScore);
-
-      return {
-        score: Math.round(healthScore),
-        factors,
-        riskFactors,
-        predictions,
-        recommendations: this.generateHealthRecommendations(healthScore, riskFactors)
-      };
-    } catch (error) {
-      console.error('Health score prediction failed:', error);
-      return {
-        score: 0,
-        error: error.message
-      };
-    }
-  }
-
-  calculateAgeScore(age) {
-    if (age < 30) return 0;
-    if (age < 50) return 5;
-    if (age < 70) return 15;
-    return 25;
-  }
-
-  calculateChronicConditionsScore(conditions) {
-    const severityMap = {
-      'diabetes': 15,
-      'hypertension': 10,
-      'heart disease': 20,
-      'kidney disease': 18,
-      'liver disease': 16,
-      'cancer': 25
+    return {
+      riskScore: Math.round(riskScore),
+      riskLevel,
+      lastCalculated: new Date().toISOString(),
+      breakdown: {
+        age: Math.round(ageScore),
+        conditions: Math.round(conditionsScore * 0.3),
+        labs: 0,
+        allergies: Math.round(allergiesScore * 0.1),
+        interactions: 0
+      },
+      riskFactors: [],
+      recommendations: []
     };
-
-    return conditions.reduce((score, condition) => {
-      const severity = severityMap[condition.toLowerCase()] || 5;
-      return score + severity;
-    }, 0);
-  }
-
-  calculateLabScore(labResults) {
-    const abnormalResults = labResults.filter(r => r.status !== 'Normal');
-    return abnormalResults.length * 3;
-  }
-
-  calculateLifestyleScore(lifestyle) {
-    let score = 0;
-    if (lifestyle.smoking) score += 20;
-    if (lifestyle.alcohol === 'heavy') score += 15;
-    if (lifestyle.exercise === 'none') score += 10;
-    if (lifestyle.diet === 'poor') score += 8;
-    return score;
-  }
-
-  calculateVitalsScore(vitals) {
-    let score = 0;
-    if (vitals.bloodPressure && vitals.bloodPressure.systolic > 140) score += 10;
-    if (vitals.heartRate && (vitals.heartRate > 100 || vitals.heartRate < 60)) score += 5;
-    if (vitals.temperature && vitals.temperature > 100.4) score += 8;
-    return score;
-  }
-
-  identifyRiskFactors(patientData, factors) {
-    const riskFactors = [];
-    
-    if (factors.age > 20) riskFactors.push('Advanced age');
-    if (factors.chronicConditions > 15) riskFactors.push('Multiple chronic conditions');
-    if (factors.labResults > 9) riskFactors.push('Multiple abnormal lab values');
-    if (factors.lifestyle > 25) riskFactors.push('High-risk lifestyle factors');
-    if (factors.vitals > 15) riskFactors.push('Abnormal vital signs');
-
-    return riskFactors;
-  }
-
-  async generateHealthPredictions(patientData, healthScore) {
-    const predictions = [];
-
-    // Simulate ML-based predictions
-    if (healthScore < 60) {
-      predictions.push({
-        condition: 'Cardiovascular Event',
-        probability: 0.25,
-        timeframe: '2 years',
-        confidence: 0.78
-      });
-    }
-
-    if (patientData.chronicConditions?.includes('diabetes') && healthScore < 70) {
-      predictions.push({
-        condition: 'Diabetic Complications',
-        probability: 0.35,
-        timeframe: '3 years',
-        confidence: 0.82
-      });
-    }
-
-    if (healthScore < 50) {
-      predictions.push({
-        condition: 'Hospital Readmission',
-        probability: 0.40,
-        timeframe: '6 months',
-        confidence: 0.75
-      });
-    }
-
-    return predictions;
-  }
-
-  generateHealthRecommendations(healthScore, riskFactors) {
-    const recommendations = [];
-
-    if (healthScore < 70) {
-      recommendations.push('Schedule comprehensive health assessment');
-      recommendations.push('Implement preventive care plan');
-    }
-
-    if (riskFactors.includes('High-risk lifestyle factors')) {
-      recommendations.push('Lifestyle modification counseling');
-      recommendations.push('Nutritionist consultation');
-    }
-
-    if (riskFactors.includes('Multiple chronic conditions')) {
-      recommendations.push('Care coordination with specialists');
-      recommendations.push('Medication review and optimization');
-    }
-
-    if (healthScore < 50) {
-      recommendations.push('Consider intensive monitoring program');
-      recommendations.push('Family/caregiver education');
-    }
-
-    return recommendations;
-  }
-
-  async analyzeMedicalImage(imageBuffer, imageType) {
-    try {
-      // Placeholder for medical image analysis
-      // In a real implementation, this would integrate with medical AI services
-      return {
-        findings: ['Analysis pending - requires specialized medical AI service'],
-        confidence: 0,
-        recommendations: ['Manual review by radiologist recommended']
-      };
-    } catch (error) {
-      console.error('Medical image analysis failed:', error);
-      return {
-        findings: [],
-        confidence: 0,
-        error: error.message
-      };
-    }
   }
 }
 
-module.exports = new AIService();
+const evaluator = new MLRiskEvaluator();
+module.exports = {
+  evaluateRisk: (data) => evaluator.evaluateRisk(data)
+};

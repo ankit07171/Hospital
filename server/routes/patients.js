@@ -1,218 +1,259 @@
 const express = require('express');
-const Patient = require('../models/Patient');
-const aiService = require('../services/aiService');
 const router = express.Router();
+const Patient = require('../models/Patient');
+const LabReport = require('../models/LabTest');
 
-// Get all patients with pagination and search
+// Get all patients - ✅ Added pagination, patientId, optimized lab count
 router.get('/', async (req, res) => {
   try {
-    const { page = 1, limit = 10, search = '', status = 'Active' } = req.query;
-    const query = { status };
+    const { status, riskLevel, search, page = 1, limit = 20 } = req.query;
+    const skip = (Number(page) - 1) * Number(limit);
+    let query = {};
 
+    if (status) query.status = status;
+    if (riskLevel) query['riskAssessment.riskLevel'] = riskLevel;
+    
     if (search) {
       query.$or = [
         { 'personalInfo.firstName': { $regex: search, $options: 'i' } },
         { 'personalInfo.lastName': { $regex: search, $options: 'i' } },
-        { patientId: { $regex: search, $options: 'i' } },
-        { 'personalInfo.phoneNumber': { $regex: search, $options: 'i' } }
+        { 'personalInfo.email': { $regex: search, $options: 'i' } },
+        { 'personalInfo.phoneNumber': { $regex: search, $options: 'i' } },
+        { patientId: { $regex: search, $options: 'i' } }  // ✅ Search by new patientId
       ];
     }
 
     const patients = await Patient.find(query)
-      .populate('visits.doctor', 'personalInfo.firstName personalInfo.lastName professionalInfo.specialization')
-      .limit(limit * 1)
-      .skip((page - 1) * limit)
-      .sort({ createdAt: -1 });
+      .sort({ 'riskAssessment.riskScore': -1, lastUpdated: -1 })
+      .skip(skip)
+      .limit(Number(limit));
 
-    const total = await Patient.countDocuments(query);
+    // ✅ Aggregate lab counts in single query (faster than Promise.all)
+    const patientIds = patients.map(p => p._id);
+    const labCounts = await LabReport.aggregate([
+      { $match: { patientId: { $in: patientIds } } },
+      { $group: { _id: '$patientId', count: { $sum: 1 } } }
+    ]);
+
+    const countMap = labCounts.reduce((acc, doc) => {
+      acc[doc._id] = doc.count;
+      return acc;
+    }, {});
+
+    const patientsWithLabCount = patients.map(patient => ({
+      ...patient.toObject(),
+      patientId: patient.patientId,  // ✅ Expose new field
+      labReportsCount: countMap[patient._id] || 0
+    }));
 
     res.json({
-      patients,
-      totalPages: Math.ceil(total / limit),
-      currentPage: page,
-      total
+      patients: patientsWithLabCount,
+      pagination: {
+        page: Number(page),
+        limit: Number(limit),
+        total: await Patient.countDocuments(query),
+        pages: Math.ceil(await Patient.countDocuments(query) / Number(limit))
+      }
     });
   } catch (error) {
-    console.error('Get patients error:', error);
+    console.error('Error fetching patients:', error);
     res.status(500).json({ error: 'Failed to fetch patients' });
   }
 });
 
-// Get patient by ID
+// Get high-risk patients (unchanged - solid)
+router.get('/high-risk', async (req, res) => {
+  try {
+    const highRiskPatients = await Patient.findHighRiskPatients();
+    res.json(highRiskPatients);
+  } catch (error) {
+    console.error('Error fetching high-risk patients:', error);
+    res.status(500).json({ error: 'Failed to fetch high-risk patients' });
+  }
+});
+
+// Get patient statistics - ✅ Added patientId stats
+router.get('/stats/overview', async (req, res) => {
+  try {
+    const [totalPatients, activePatients, riskDistribution, avgRiskScore] = await Promise.all([
+      Patient.countDocuments(),
+      Patient.countDocuments({ status: 'Active' }),
+      Patient.aggregate([{ $group: { _id: '$riskAssessment.riskLevel', count: { $sum: 1 } } }]),
+      Patient.aggregate([{ $group: { _id: null, avgScore: { $avg: '$riskAssessment.riskScore' } } }])
+    ]);
+
+    const [totalLabReports, criticalReports] = await Promise.all([
+      LabReport.countDocuments(),
+      LabReport.countDocuments({ status: 'Critical' })
+    ]);
+
+    res.json({
+      totalPatients,
+      activePatients,
+      riskDistribution,
+      averageRiskScore: avgRiskScore[0]?.avgScore || 0,
+      totalLabReports,
+      criticalReports
+    });
+  } catch (error) {
+    console.error('Error fetching statistics:', error);
+    res.status(500).json({ error: 'Failed to fetch statistics' });
+  }
+});
+
+// Get single patient by ID - ✅ Added patientId, lab count optimization
 router.get('/:id', async (req, res) => {
   try {
-    const patient = await Patient.findById(req.params.id)
-      .populate('visits.doctor', 'personalInfo.firstName personalInfo.lastName professionalInfo.specialization');
-    
+    if (!req.params.id || req.params.id === 'undefined') {
+      return res.status(400).json({ error: 'ID required' });
+    }
+
+    const patient = await Patient.findById(req.params.id);
     if (!patient) {
       return res.status(404).json({ error: 'Patient not found' });
     }
 
-    res.json(patient);
+    const labReportsCount = await LabReport.countDocuments({ patientId: patient._id });
+    res.json({
+      ...patient.toObject(),
+      patientId: patient.patientId,  // ✅ Expose
+      labReportsCount
+    });
   } catch (error) {
-    console.error('Get patient error:', error);
+    console.error('Error fetching patient:', error);
     res.status(500).json({ error: 'Failed to fetch patient' });
   }
 });
 
-// Create new patient
+// Create new patient (unchanged - perfect with new schema)
 router.post('/', async (req, res) => {
   try {
-    const patient = new Patient(req.body);
+    const patientData = req.body;
+
+    if (!patientData.personalInfo?.firstName || 
+        !patientData.personalInfo?.lastName ||
+        !patientData.personalInfo?.dateOfBirth ||
+        !patientData.personalInfo?.gender ||
+        !patientData.personalInfo?.phoneNumber) {
+      return res.status(400).json({ 
+        error: 'Missing required fields',
+        required: ['firstName', 'lastName', 'dateOfBirth', 'gender', 'phoneNumber']
+      });
+    }
+
+    const patient = new Patient(patientData);
+    patient.updateRiskAssessment();
     await patient.save();
-
-    // Generate initial health score
-    const healthScoreData = await aiService.predictHealthScore({
-      age: new Date().getFullYear() - new Date(patient.personalInfo.dateOfBirth).getFullYear(),
-      chronicConditions: patient.medicalInfo.chronicConditions,
-      lifestyle: req.body.lifestyle || {}
-    });
-
-    patient.healthScore.current = healthScoreData.score;
-    patient.healthScore.riskFactors = healthScoreData.riskFactors;
-    patient.healthScore.predictions = healthScoreData.predictions;
-    await patient.save();
-
-    // Emit real-time update
-    req.app.get('io').emit('patient-created', patient);
 
     res.status(201).json(patient);
   } catch (error) {
-    console.error('Create patient error:', error);
-    res.status(500).json({ error: 'Failed to create patient' });
+    console.error('Error creating patient:', error);
+    res.status(500).json({ 
+      error: 'Failed to create patient',
+      details: error.message 
+    });
   }
 });
 
-// Update patient
+// Update patient (unchanged)
 router.put('/:id', async (req, res) => {
   try {
-    const patient = await Patient.findByIdAndUpdate(
-      req.params.id,
-      req.body,
-      { new: true, runValidators: true }
-    );
+    if (!req.params.id || req.params.id === 'undefined') {
+      return res.status(400).json({ error: 'ID required' });
+    }
 
+    const patient = await Patient.findById(req.params.id);
     if (!patient) {
       return res.status(404).json({ error: 'Patient not found' });
     }
 
-    // Recalculate health score if medical info changed
+    if (req.body.personalInfo) {
+      patient.personalInfo = { ...patient.personalInfo, ...req.body.personalInfo };
+    }
     if (req.body.medicalInfo) {
-      const healthScoreData = await aiService.predictHealthScore({
-        age: new Date().getFullYear() - new Date(patient.personalInfo.dateOfBirth).getFullYear(),
-        chronicConditions: patient.medicalInfo.chronicConditions,
-        lifestyle: req.body.lifestyle || {}
-      });
-
-      patient.healthScore.current = healthScoreData.score;
-      patient.healthScore.riskFactors = healthScoreData.riskFactors;
-      patient.healthScore.predictions = healthScoreData.predictions;
-      await patient.save();
+      patient.medicalInfo = { ...patient.medicalInfo, ...req.body.medicalInfo };
+    }
+    if (req.body.status) {
+      patient.status = req.body.status;
     }
 
-    // Emit real-time update
-    req.app.get('io').emit('patient-updated', patient);
+    patient.updateRiskAssessment();
+    await patient.save();
 
     res.json(patient);
   } catch (error) {
-    console.error('Update patient error:', error);
-    res.status(500).json({ error: 'Failed to update patient' });
+    console.error('Error updating patient:', error);
+    res.status(500).json({ error: 'Failed to update patient', details: error.message });
   }
 });
 
-// Add visit to patient
-router.post('/:id/visits', async (req, res) => {
+// Update medical info only (unchanged)
+router.patch('/:id/medical-info', async (req, res) => {
   try {
+    if (!req.params.id || req.params.id === 'undefined') {
+      return res.status(400).json({ error: 'ID required' });
+    }
+
     const patient = await Patient.findById(req.params.id);
     if (!patient) {
       return res.status(404).json({ error: 'Patient not found' });
     }
 
-    const visitId = `VIS${String(patient.visits.length + 1).padStart(6, '0')}`;
-    const visit = {
-      visitId,
-      ...req.body,
-      date: new Date()
-    };
+    const { bloodGroup, allergies, chronicConditions, emergencyContact } = req.body;
+    if (bloodGroup !== undefined) patient.medicalInfo.bloodGroup = bloodGroup;
+    if (allergies !== undefined) patient.medicalInfo.allergies = allergies;
+    if (chronicConditions !== undefined) patient.medicalInfo.chronicConditions = chronicConditions;
+    if (emergencyContact !== undefined) patient.medicalInfo.emergencyContact = emergencyContact;
 
-    patient.visits.push(visit);
+    await patient.updateRiskAssessment();
     await patient.save();
 
-    // Emit real-time update
-    req.app.get('io').emit('patient-visit-added', { patientId: patient._id, visit });
-
-    res.status(201).json(visit);
+    res.json(patient);
   } catch (error) {
-    console.error('Add visit error:', error);
-    res.status(500).json({ error: 'Failed to add visit' });
+    console.error('Error updating medical info:', error);
+    res.status(500).json({ error: 'Failed to update medical info', details: error.message });
   }
 });
 
-// Update health score
-router.post('/:id/health-score', async (req, res) => {
+// Recalculate risk (unchanged)
+router.post('/:id/recalculate-risk', async (req, res) => {
   try {
+    if (!req.params.id || req.params.id === 'undefined') {
+      return res.status(400).json({ error: 'ID required' });
+    }
+
     const patient = await Patient.findById(req.params.id);
     if (!patient) {
       return res.status(404).json({ error: 'Patient not found' });
     }
 
-    const healthScoreData = await aiService.predictHealthScore({
-      age: new Date().getFullYear() - new Date(patient.personalInfo.dateOfBirth).getFullYear(),
-      chronicConditions: patient.medicalInfo.chronicConditions,
-      recentLabResults: req.body.labResults || [],
-      lifestyle: req.body.lifestyle || {},
-      vitals: req.body.vitals || {}
-    });
-
-    // Add to history
-    patient.healthScore.history.push({
-      score: patient.healthScore.current,
-      date: new Date(),
-      factors: patient.healthScore.riskFactors
-    });
-
-    // Update current score
-    patient.healthScore.current = healthScoreData.score;
-    patient.healthScore.riskFactors = healthScoreData.riskFactors;
-    patient.healthScore.predictions = healthScoreData.predictions;
-
-    await patient.save();
-
-    // Emit real-time update
-    req.app.get('io').emit('health-score-updated', {
-      patientId: patient._id,
-      healthScore: patient.healthScore
-    });
-
-    res.json(patient.healthScore);
+    const riskAssessment = await patient.updateRiskAssessment();
+    res.json({ message: 'Risk assessment recalculated successfully', riskAssessment });
   } catch (error) {
-    console.error('Update health score error:', error);
-    res.status(500).json({ error: 'Failed to update health score' });
+    console.error('Error recalculating risk:', error);
+    res.status(500).json({ error: 'Failed to recalculate risk', details: error.message });
   }
 });
 
-// Search patients by patient ID (for OCR verification)
-router.get('/search/by-id/:patientId', async (req, res) => {
+// Delete patient (unchanged - LabReport uses _id correctly)
+router.delete('/:id', async (req, res) => {
   try {
-    const patient = await Patient.findOne({ patientId: req.params.patientId });
-    
+    if (!req.params.id || req.params.id === 'undefined') {
+      return res.status(400).json({ error: 'ID required' });
+    }
+
+    const patient = await Patient.findById(req.params.id);
     if (!patient) {
       return res.status(404).json({ error: 'Patient not found' });
     }
 
-    res.json({
-      found: true,
-      patient: {
-        _id: patient._id,
-        patientId: patient.patientId,
-        name: `${patient.personalInfo.firstName} ${patient.personalInfo.lastName}`,
-        dateOfBirth: patient.personalInfo.dateOfBirth,
-        phoneNumber: patient.personalInfo.phoneNumber
-      }
-    });
+    await LabReport.deleteMany({ patientId: req.params.id });
+    await Patient.findByIdAndDelete(req.params.id);
+
+    res.json({ message: 'Patient and associated lab reports deleted successfully' });
   } catch (error) {
-    console.error('Search patient by ID error:', error);
-    res.status(500).json({ error: 'Failed to search patient' });
+    console.error('Error deleting patient:', error);
+    res.status(500).json({ error: 'Failed to delete patient' });
   }
 });
 

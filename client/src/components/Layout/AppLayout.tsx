@@ -4,6 +4,7 @@ import Navbar from "./Navbar";
 import Sidebar from "./Sidebar";
 import Dashboard from "../Dashboard/Dashboard";
 import PatientManagement from "../Patient/PatientManagement";
+import PatientForm from "../Patient/PatientForm";
 import DoctorManagement from "../Doctor/DoctorManagement";
 import AppointmentManagement from "../Appointment/AppointmentManagement";
 import LabManagement from "../Lab/LabManagement";
@@ -11,7 +12,6 @@ import PharmacyManagement from "../Pharmacy/PharmacyManagement";
 import BillingManagement from "../Billing/BillingManagement";
 import OCRTools from "../OCR/OCRTools";
 import Analytics from "../Analytics/Analytics";
-import InventoryManagement from "../Inventory/InventoryManagement";
 import EmergencyManagement from "../Emergency/EmergencyManagement";
 import { Routes, Route } from "react-router-dom";
 
@@ -43,7 +43,12 @@ export default function AppLayout() {
         <Routes>
           <Route index element={<Dashboard />} />              {/* /app/ */}
           <Route path="dashboard" element={<Dashboard />} />   {/* /app/dashboard */}
-          <Route path="patients/*" element={<PatientManagement />} />
+          {/* <Route path="patients/*" element={<PatientManagement />} /> */}
+          {/* <Route path="patients/new" element={<PatientForm />} /> */}
+        
+<Route path="patients" element={<PatientManagement />} />
+<Route path="patients/new" element={<PatientForm />} />
+<Route path="patients/:id/edit" element={<PatientForm />} />
           <Route path="doctors/*" element={<DoctorManagement />} />
           <Route path="appointments/*" element={<AppointmentManagement />} />
           <Route path="lab/*" element={<LabManagement />} />
@@ -51,7 +56,6 @@ export default function AppLayout() {
           <Route path="billing/*" element={<BillingManagement />} />
           <Route path="ocr/*" element={<OCRTools />} />
           <Route path="analytics" element={<Analytics />} />
-          <Route path="inventory/*" element={<InventoryManagement />} />
           <Route path="emergency/*" element={<EmergencyManagement />} />
           
           {/* Fallback for unmatched routes */}

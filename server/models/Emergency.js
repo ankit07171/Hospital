@@ -8,7 +8,7 @@ const emergencySchema = new mongoose.Schema({
   },
   emergencyId: {
     type: String,
-    required: true,
+    // required: true,
     unique: true
   },
   triageLevel: {
