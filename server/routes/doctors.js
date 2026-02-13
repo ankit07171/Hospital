@@ -123,6 +123,18 @@ req.body.doctorId = `DOC${String(doctorCount + 1).padStart(6, '0')}`;
 // Update doctor
 router.put('/:id', async (req, res) => {
   try {
+    // Fix workSchedule → schedule mapping for updates too
+    if (req.body.workSchedule) {
+      req.body.schedule = {
+        workingDays: req.body.workSchedule.workingDays || [],
+        workingHours: {
+          start: req.body.workSchedule.startTime,
+          end: req.body.workSchedule.endTime,
+        }
+      };
+      delete req.body.workSchedule;
+    }
+
     const doctor = await Doctor.findByIdAndUpdate(
       req.params.id,
       req.body,
@@ -134,12 +146,37 @@ router.put('/:id', async (req, res) => {
     }
 
     // Emit real-time update
-    req.app.get('io').emit('doctor-updated', doctor);
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('doctor-updated', doctor);
+    }
 
     res.json(doctor);
   } catch (error) {
     console.error('Update doctor error:', error);
     res.status(500).json({ error: 'Failed to update doctor' });
+  }
+});
+
+// Delete doctor
+router.delete('/:id', async (req, res) => {
+  try {
+    const doctor = await Doctor.findByIdAndDelete(req.params.id);
+    
+    if (!doctor) {
+      return res.status(404).json({ error: 'Doctor not found' });
+    }
+
+    // Emit real-time update
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('doctor-deleted', { doctorId: doctor._id });
+    }
+
+    res.json({ message: 'Doctor deleted successfully' });
+  } catch (error) {
+    console.error('Delete doctor error:', error);
+    res.status(500).json({ error: 'Failed to delete doctor' });
   }
 });
 

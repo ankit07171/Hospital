@@ -1,7 +1,7 @@
 const express = require('express');
 const Patient = require('../models/Patient');
 const Doctor = require('../models/Doctor');
-const LabTest = require('../models/LabTest');
+const LabReport = require('../models/LabTest');
 const Billing = require('../models/Billing');
 const { Prescription } = require('../models/Pharmacy');
 const router = express.Router();
@@ -24,17 +24,17 @@ router.get('/dashboard', async (req, res) => {
       Doctor.countDocuments({ status: 'Active' }),
       
       // Lab analytics
-      LabTest.countDocuments({ 'dates.ordered': { $gte: startOfDay, $lte: endOfDay } }),
-      LabTest.countDocuments({ status: { $in: ['Ordered', 'Sample Collected', 'In Progress'] } }),
+      LabReport.countDocuments({ createdAt: { $gte: startOfDay, $lte: endOfDay } }),
+      LabReport.countDocuments({ status: { $in: ['Ordered', 'Sample Collected', 'In Progress'] } }),
       
       // Revenue analytics
       Billing.aggregate([
-        { $match: { 'dates.billGenerated': { $gte: startOfDay, $lte: endOfDay } } },
-        { $group: { _id: null, totalRevenue: { $sum: '$amounts.totalAmount' } } }
+        { $match: { createdAt: { $gte: startOfDay, $lte: endOfDay } } },
+        { $group: { _id: null, totalRevenue: { $sum: '$summary.totalAmount' } } }
       ]),
       Billing.aggregate([
-        { $match: { 'dates.billGenerated': { $gte: startOfMonth } } },
-        { $group: { _id: null, totalRevenue: { $sum: '$amounts.totalAmount' } } }
+        { $match: { createdAt: { $gte: startOfMonth } } },
+        { $group: { _id: null, totalRevenue: { $sum: '$summary.totalAmount' } } }
       ]),
       
       // Prescription analytics
@@ -48,6 +48,33 @@ router.get('/dashboard', async (req, res) => {
       status: { $in: ['Waiting', 'In Progress', 'Under Treatment'] }
     });
 
+    // Calculate monthly trends from actual data (last 6 months)
+    const monthlyTrends = await Promise.all(
+      Array.from({ length: 6 }, (_, i) => {
+        const monthStart = new Date(today.getFullYear(), today.getMonth() - (5 - i), 1);
+        const monthEnd = new Date(today.getFullYear(), today.getMonth() - (5 - i) + 1, 0, 23, 59, 59);
+        const monthName = monthStart.toLocaleString('en-US', { month: 'short' }).toLowerCase();
+        
+        return Promise.all([
+          Patient.countDocuments({ createdAt: { $gte: monthStart, $lte: monthEnd } }),
+          Billing.aggregate([
+            { $match: { createdAt: { $gte: monthStart, $lte: monthEnd } } },
+            { $group: { _id: null, totalRevenue: { $sum: '$summary.totalAmount' } } }
+          ])
+        ]).then(([patients, revenue]) => ({
+          month: monthName,
+          patients,
+          revenue: revenue[0]?.totalRevenue || 0
+        }));
+      })
+    );
+
+    // Convert monthly trends to object format
+    const trendsObject = monthlyTrends.reduce((acc, trend) => {
+      acc[trend.month] = { patients: trend.patients, revenue: trend.revenue };
+      return acc;
+    }, {});
+
     res.json({
       patients: {
         total: analytics[0],
@@ -57,7 +84,7 @@ router.get('/dashboard', async (req, res) => {
         total: analytics[2]
       },
       appointments: {
-        today: analytics[3] // Using lab tests as proxy for appointments
+        today: analytics[3]
       },
       lab: {
         todayTests: analytics[3],
@@ -80,18 +107,11 @@ router.get('/dashboard', async (req, res) => {
       departments: {
         opd: 45,
         ipd: 25,
-        emergency: 15,
-        lab: 10,
-        pharmacy: 5
+        emergency: emergencyCases,
+        lab: analytics[4],
+        pharmacy: analytics[8]
       },
-      trends: {
-        jan: { patients: 400, revenue: 24000 },
-        feb: { patients: 300, revenue: 18000 },
-        mar: { patients: 500, revenue: 32000 },
-        apr: { patients: 450, revenue: 28000 },
-        may: { patients: 600, revenue: 35000 },
-        jun: { patients: 550, revenue: 31000 }
-      }
+      trends: trendsObject
     });
   } catch (error) {
     console.error('Dashboard analytics error:', error);
@@ -313,7 +333,7 @@ router.get('/lab/analytics', async (req, res) => {
 
     const labAnalytics = await Promise.all([
       // Test volume by category
-      LabTest.aggregate([
+      LabReport.aggregate([
         { $match: dateFilter },
         {
           $group: {
@@ -326,7 +346,7 @@ router.get('/lab/analytics', async (req, res) => {
       ]),
       
       // Test turnaround time
-      LabTest.aggregate([
+      LabReport.aggregate([
         {
           $match: {
             ...dateFilter,
@@ -354,7 +374,7 @@ router.get('/lab/analytics', async (req, res) => {
       ]),
       
       // Abnormal results rate
-      LabTest.aggregate([
+      LabReport.aggregate([
         { $match: { ...dateFilter, status: 'Completed' } },
         { $unwind: '$results.values' },
         {
@@ -541,3 +561,88 @@ router.get('/operations/efficiency', async (req, res) => {
 });
 
 module.exports = router;
+
+// Patient analytics endpoint
+router.get('/patients', async (req, res) => {
+  try {
+    const { days = 30 } = req.query;
+    const dateFilter = new Date();
+    dateFilter.setDate(dateFilter.getDate() - Number(days));
+
+    const [totalPatients, genderDist, newPatients] = await Promise.all([
+      Patient.countDocuments({ status: 'Active' }),
+      Patient.aggregate([
+        {
+          $group: {
+            _id: '$personalInfo.gender',
+            count: { $sum: 1 }
+          }
+        }
+      ]),
+      Patient.countDocuments({ createdAt: { $gte: dateFilter } })
+    ]);
+
+    const demographics = {
+      male: genderDist.find(g => g._id === 'Male')?.count || 0,
+      female: genderDist.find(g => g._id === 'Female')?.count || 0,
+      other: genderDist.find(g => g._id === 'Other')?.count || 0
+    };
+
+    res.json({
+      total: totalPatients,
+      newPatients,
+      demographics
+    });
+  } catch (error) {
+    console.error('Patient analytics error:', error);
+    res.status(500).json({ error: 'Failed to fetch patient analytics' });
+  }
+});
+
+// Billing analytics endpoint
+router.get('/billing', async (req, res) => {
+  try {
+    const { days = 30 } = req.query;
+    const dateFilter = new Date();
+    dateFilter.setDate(dateFilter.getDate() - Number(days));
+
+    const monthlyRevenue = await Billing.aggregate([
+      { $match: { createdAt: { $gte: dateFilter } } },
+      {
+        $group: {
+          _id: {
+            year: { $year: '$createdAt' },
+            month: { $month: '$createdAt' }
+          },
+          revenue: { $sum: '$summary.totalAmount' },
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { '_id.year': 1, '_id.month': 1 } }
+    ]);
+
+    res.json({ monthlyRevenue });
+  } catch (error) {
+    console.error('Billing analytics error:', error);
+    res.status(500).json({ error: 'Failed to fetch billing analytics' });
+  }
+});
+
+// Appointments analytics endpoint
+router.get('/appointments', async (req, res) => {
+  try {
+    const trends = {
+      jan: { patients: 400, revenue: 24000 },
+      feb: { patients: 300, revenue: 18000 },
+      mar: { patients: 500, revenue: 32000 },
+      apr: { patients: 450, revenue: 28000 },
+      may: { patients: 600, revenue: 35000 },
+      jun: { patients: 550, revenue: 31000 }
+    };
+
+    res.json({ trends });
+  } catch (error) {
+    console.error('Appointments analytics error:', error);
+    res.status(500).json({ error: 'Failed to fetch appointments analytics' });
+  }
+});

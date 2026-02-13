@@ -33,6 +33,7 @@ import {
   Add,
   Search,
   Edit,
+  Delete,
   Visibility,
   LocalHospital,
   Phone,
@@ -74,6 +75,8 @@ const DoctorList: React.FC = () => {
   const [totalPages, setTotalPages] = useState(1);
   const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [doctorToDelete, setDoctorToDelete] = useState<Doctor | null>(null);
   const [departmentFilter, setDepartmentFilter] = useState('All');
   const navigate = useNavigate();
 
@@ -92,57 +95,12 @@ const DoctorList: React.FC = () => {
           department: departmentFilter !== 'All' ? departmentFilter : '',
         },
       });
-      setDoctors(response.data.doctors);
-      setTotalPages(response.data.totalPages);
+      setDoctors(response.data.doctors || []);
+      setTotalPages(response.data.totalPages || 1);
     } catch (error) {
       console.error('Failed to fetch doctors:', error);
-      // Mock data for demo
-      setDoctors([
-        {
-          _id: '1',
-          doctorId: 'DOC000001',
-          personalInfo: {
-            firstName: 'Dr. Sarah',
-            lastName: 'Johnson',
-            email: 'sarah.johnson@hospital.com',
-            phoneNumber: '+91-9876543210',
-          },
-          professionalInfo: {
-            specialization: 'Cardiology',
-            department: 'Cardiology',
-            qualification: ['MBBS', 'MD Cardiology'],
-            experience: 15,
-            consultationFee: 1500,
-          },
-          performance: {
-            totalConsultations: 1250,
-            patientSatisfaction: 4.8,
-          },
-          status: 'Active',
-        },
-        {
-          _id: '2',
-          doctorId: 'DOC000002',
-          personalInfo: {
-            firstName: 'Dr. Michael',
-            lastName: 'Chen',
-            email: 'michael.chen@hospital.com',
-            phoneNumber: '+91-9876543211',
-          },
-          professionalInfo: {
-            specialization: 'Neurology',
-            department: 'Neurology',
-            qualification: ['MBBS', 'MD Neurology', 'DM'],
-            experience: 12,
-            consultationFee: 2000,
-          },
-          performance: {
-            totalConsultations: 980,
-            patientSatisfaction: 4.9,
-          },
-          status: 'Active',
-        },
-      ]);
+      setDoctors([]);
+      setTotalPages(1);
     } finally {
       setLoading(false);
     }
@@ -151,6 +109,25 @@ const DoctorList: React.FC = () => {
   const handleViewDoctor = (doctor: Doctor) => {
     setSelectedDoctor(doctor);
     setDialogOpen(true);
+  };
+
+  const handleDeleteClick = (doctor: Doctor) => {
+    setDoctorToDelete(doctor);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!doctorToDelete) return;
+    
+    try {
+      await axios.delete(`/api/doctors/${doctorToDelete._id}`);
+      setDoctors(doctors.filter(d => d._id !== doctorToDelete._id));
+      setDeleteDialogOpen(false);
+      setDoctorToDelete(null);
+    } catch (error) {
+      console.error('Failed to delete doctor:', error);
+      alert('Failed to delete doctor');
+    }
   };
 
   const getStatusColor = (status: string) => {
@@ -171,7 +148,7 @@ const DoctorList: React.FC = () => {
         <Button
           variant="contained"
           startIcon={<Add />}
-          onClick={() => navigate('/doctors/new')}
+          onClick={() => navigate('/app/doctors/new')}
         >
           Add New Doctor
         </Button>
@@ -244,7 +221,24 @@ const DoctorList: React.FC = () => {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {doctors.map((doctor) => (
+                {doctors.length === 0 && !loading ? (
+                  <TableRow>
+                    <TableCell colSpan={7} align="center" sx={{ py: 8 }}>
+                      <LocalHospital sx={{ fontSize: 64, color: 'action.disabled', mb: 2 }} />
+                      <Typography variant="h6" color="text.secondary" mb={2}>
+                        No doctors found
+                      </Typography>
+                      <Button 
+                        variant="contained" 
+                        startIcon={<Add />}
+                        onClick={() => navigate('/app/doctors/new')}
+                      >
+                        Add First Doctor
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  doctors.map((doctor) => (
                   <TableRow key={doctor._id} hover>
                     <TableCell>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
@@ -333,14 +327,16 @@ const DoctorList: React.FC = () => {
                         </IconButton>
                         <IconButton
                           size="small"
-                          onClick={() => navigate(`/doctors/${doctor._id}/schedule`)}
+                          color="error"
+                          onClick={() => handleDeleteClick(doctor)}
                         >
-                          <Schedule />
+                          <Delete />
                         </IconButton>
                       </Box>
                     </TableCell>
                   </TableRow>
-                ))}
+                ))
+                )}
               </TableBody>
             </Table>
           </TableContainer>
@@ -470,6 +466,27 @@ const DoctorList: React.FC = () => {
             </DialogActions>
           </>
         )}
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={() => setDeleteDialogOpen(false)}
+        maxWidth="sm"
+      >
+        <DialogTitle>Delete Doctor?</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Are you sure you want to delete Dr. {doctorToDelete?.personalInfo.firstName} {doctorToDelete?.personalInfo.lastName}? 
+            This action cannot be undone.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
+          <Button color="error" variant="contained" onClick={handleDeleteConfirm}>
+            Delete
+          </Button>
+        </DialogActions>
       </Dialog>
     </Box>
   );

@@ -98,6 +98,19 @@ const labReportSchema = new mongoose.Schema({
     default: 0
   },
 
+  // Billing integration fields
+  billed: {
+    type: Boolean,
+    default: false
+  },
+  cost: {
+    type: Number,
+    default: 500
+  },
+  testName: {
+    type: String
+  },
+
   // Metadata
   createdAt: {
     type: Date,

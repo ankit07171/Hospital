@@ -20,7 +20,6 @@ import {
   LocalPharmacy,
   Receipt,
   CameraAlt,
-  Analytics,
   Emergency,
 } from '@mui/icons-material';
 
@@ -53,7 +52,6 @@ const menuItems = [
   { text: 'Pharmacy', icon: <LocalPharmacy />, path: '/app/pharmacy' },
   { text: 'Billing', icon: <Receipt />, path: '/app/billing' },
   { text: 'Medical Imaging', icon: <CameraAlt />, path: '/app/ocr' },
-  { text: 'Analytics', icon: <Analytics />, path: '/app/analytics' },
   { text: 'Emergency', icon: <Emergency />, path: '/app/emergency' },
 ];
 

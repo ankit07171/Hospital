@@ -8,7 +8,9 @@ const medicalImagingSchema = new mongoose.Schema({
   },
   patientId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Patient'
+    ref: 'Patient',
+    required: true,
+    index: true
   },
   patientName: String,
   patientAge: Number,

@@ -11,9 +11,9 @@ import LabManagement from "../Lab/LabManagement";
 import PharmacyManagement from "../Pharmacy/PharmacyManagement";
 import BillingManagement from "../Billing/BillingManagement";
 import OCRTools from "../OCR/OCRTools";
-import Analytics from "../Analytics/Analytics";
 import EmergencyManagement from "../Emergency/EmergencyManagement";
 import { Routes, Route } from "react-router-dom";
+import DoctorForm from "../Doctor/DoctorForm";
 
 // src/components/Layout/AppLayout.tsx
 export default function AppLayout() {
@@ -34,12 +34,11 @@ export default function AppLayout() {
           flexGrow: 1,
           p: { xs: 2, md: 3 },
           mt: { xs: 8, md: 9 },
-          ml: sidebarOpen ? "240px" : "72px",
+          ml: sidebarOpen ? "50px" : "72px",
           transition: "margin-left 0.3s ease",
           overflow: "auto",
         }}
-      >
-        {/* ✅ FIXED ROUTES - Match sidebar paths */}
+      > 
         <Routes>
           <Route index element={<Dashboard />} />              {/* /app/ */}
           <Route path="dashboard" element={<Dashboard />} />   {/* /app/dashboard */}
@@ -50,12 +49,13 @@ export default function AppLayout() {
 <Route path="patients/new" element={<PatientForm />} />
 <Route path="patients/:id/edit" element={<PatientForm />} />
           <Route path="doctors/*" element={<DoctorManagement />} />
+          <Route path="doctors/new" element={<DoctorForm />} />
+
           <Route path="appointments/*" element={<AppointmentManagement />} />
           <Route path="lab/*" element={<LabManagement />} />
           <Route path="pharmacy/*" element={<PharmacyManagement />} />
           <Route path="billing/*" element={<BillingManagement />} />
           <Route path="ocr/*" element={<OCRTools />} />
-          <Route path="analytics" element={<Analytics />} />
           <Route path="emergency/*" element={<EmergencyManagement />} />
           
           {/* Fallback for unmatched routes */}

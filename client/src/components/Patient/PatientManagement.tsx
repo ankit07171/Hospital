@@ -499,7 +499,7 @@ const Patients: React.FC = () => {
                     <Box sx={{ display: 'flex', gap: 0.5 }}>
                       <Tooltip title="Edit Patient">
                         <IconButton
-                          onClick={() => navigate(`/patients/${patient._id}/edit`)}
+                          onClick={() => navigate(`/app/patients/${patient._id}/edit`)}
                           color="primary"
                         >
                           <Edit />

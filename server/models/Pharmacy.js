@@ -302,6 +302,15 @@ const prescriptionSchema = new Schema({
   dispensedBy: {
     type: String,
     trim: true
+  },
+  // Billing integration fields
+  billed: {
+    type: Boolean,
+    default: false
+  },
+  patientId: {
+    type: Schema.Types.ObjectId,
+    ref: 'Patient'
   }
 }, {
   timestamps: true,

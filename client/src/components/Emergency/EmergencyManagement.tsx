@@ -93,9 +93,16 @@ interface EmergencyCase {
   arrivalMethod: string;
   assignedDoctor?: {
     _id: string;
-    firstName: string;
-    lastName: string;
-    specialization: string;
+    firstName?: string;
+    lastName?: string;
+    specialization?: string;
+    personalInfo?: {
+      firstName: string;
+      lastName: string;
+    };
+    professionalInfo?: {
+      specialization: string;
+    };
   };
   assignedNurse?: string;
   bedNumber?: string;
@@ -130,13 +137,6 @@ interface EmergencyStats {
   avgWaitingTime: number;
 }
 
-interface Doctor {
-  _id: string;
-  firstName: string;
-  lastName: string;
-  specialization: string;
-}
-
 interface Patient {
   _id: string;
   patientId?: string;
@@ -152,7 +152,6 @@ interface Patient {
 
 const EmergencyManagement: React.FC = () => {
   const [cases, setCases] = useState<EmergencyCase[]>([]);
-  const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [patients, setPatients] = useState<Patient[]>([]);
   const [stats, setStats] = useState<EmergencyStats>({
     totalCases: 0,
@@ -169,10 +168,8 @@ const EmergencyManagement: React.FC = () => {
   const [openVitalsDialog, setOpenVitalsDialog] = useState(false);
   const [openNotesDialog, setOpenNotesDialog] = useState(false);
   const [openDetailDialog, setOpenDetailDialog] = useState(false);
-  const [openDoctorAssignDialog, setOpenDoctorAssignDialog] = useState(false);
   const [openStatusDialog, setOpenStatusDialog] = useState(false);
   const [selectedCase, setSelectedCase] = useState<EmergencyCase | null>(null);
-  const [selectedDoctor, setSelectedDoctor] = useState('');
   const [newStatus, setNewStatus] = useState('');
   const [newNote, setNewNote] = useState('');
   const [noteProvider, setNoteProvider] = useState('');
@@ -204,7 +201,6 @@ const EmergencyManagement: React.FC = () => {
   useEffect(() => {
     fetchCases();
     fetchStats();
-    fetchDoctors();
     fetchPatients();
 
     // Auto-refresh every 30 seconds
@@ -241,15 +237,6 @@ const EmergencyManagement: React.FC = () => {
       setStats(response.data);
     } catch (error) {
       console.error('Error fetching emergency stats:', error);
-    }
-  };
-
-  const fetchDoctors = async () => {
-    try {
-      const response = await axios.get('/api/doctors');
-      setDoctors(response.data.doctors || []);
-    } catch (error) {
-      console.error('Error fetching doctors:', error);
     }
   };
 
@@ -350,26 +337,6 @@ const EmergencyManagement: React.FC = () => {
     }
   };
 
-  const handleAssignDoctor = async () => {
-    if (!selectedCase || !selectedDoctor) {
-      showSnackbar('Please select a doctor', 'warning');
-      return;
-    }
-
-    try {
-      await axios.put(`/api/emergency/${selectedCase._id}/assign-doctor`, {
-        doctorId: selectedDoctor,
-      });
-      showSnackbar('Doctor assigned successfully', 'success');
-      setOpenDoctorAssignDialog(false);
-      setSelectedDoctor('');
-      fetchCases();
-    } catch (error) {
-      console.error('Error assigning doctor:', error);
-      showSnackbar('Failed to assign doctor', 'error');
-    }
-  };
-
   const handleUpdateStatus = async () => {
     if (!selectedCase || !newStatus) {
       showSnackbar('Please select a status', 'warning');
@@ -457,12 +424,6 @@ const EmergencyManagement: React.FC = () => {
     setOpenNotesDialog(true);
   };
 
-  const handleDoctorAssign = (emergencyCase: EmergencyCase) => {
-    setSelectedCase(emergencyCase);
-    setSelectedDoctor(emergencyCase.assignedDoctor?._id || '');
-    setOpenDoctorAssignDialog(true);
-  };
-
   const handleStatusChange = (emergencyCase: EmergencyCase) => {
     setSelectedCase(emergencyCase);
     setNewStatus(emergencyCase.status);
@@ -518,15 +479,14 @@ const EmergencyManagement: React.FC = () => {
   };
 
   const exportToCSV = () => {
-    const headers = ['Emergency ID', 'Patient Name', 'Triage', 'Chief Complaint', 'Arrival Time', 'Status', 'Doctor'];
+    const headers = ['Emergency ID', 'Patient Name', 'Triage', 'Chief Complaint', 'Arrival Time', 'Status'];
     const rows = cases.map(c => [
       c.emergencyId,
       `${c.patientId.personalInfo.firstName} ${c.patientId.personalInfo.lastName}`,
       c.triageLevel,
       c.chiefComplaint,
       format(new Date(c.arrivalTime), 'yyyy-MM-dd HH:mm'),
-      c.status,
-      c.assignedDoctor ? `Dr.Lala ${c.assignedDoctor.firstName} ${c.assignedDoctor.lastName}` : 'Not assigned'
+      c.status
     ]);
 
     const csv = [headers, ...rows].map(row => row.join(',')).join('\n');
@@ -766,14 +726,13 @@ const EmergencyManagement: React.FC = () => {
                   <TableCell sx={{ fontWeight: 'bold' }}>Arrival</TableCell>
                   <TableCell sx={{ fontWeight: 'bold' }}>Wait Time</TableCell>
                   <TableCell sx={{ fontWeight: 'bold' }}>Status</TableCell>
-                  <TableCell sx={{ fontWeight: 'bold' }}>Doctor</TableCell>
                   <TableCell sx={{ fontWeight: 'bold' }}>Actions</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {cases.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={10} align="center">
+                    <TableCell colSpan={9} align="center">
                       <Box sx={{ py: 4 }}>
                         <LocalHospital sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
                         <Typography color="textSecondary">
@@ -853,26 +812,6 @@ const EmergencyManagement: React.FC = () => {
                           onClick={() => handleStatusChange(emergencyCase)}
                           sx={{ cursor: 'pointer' }}
                         />
-                      </TableCell>
-                      <TableCell>
-                        {emergencyCase.assignedDoctor ? (
-                          <Box>
-                            <Typography variant="body2" fontWeight="medium">
-                              Dr. {emergencyCase.assignedDoctor.firstName} {emergencyCase.assignedDoctor.lastName}
-                            </Typography>
-                            <Typography variant="caption" color="textSecondary">
-                              {emergencyCase.assignedDoctor.specialization}
-                            </Typography>
-                          </Box>
-                        ) : (
-                          <Button
-                            size="small"
-                            startIcon={<PersonAdd />}
-                            onClick={() => handleDoctorAssign(emergencyCase)}
-                          >
-                            Assign
-                          </Button>
-                        )}
                       </TableCell>
                       <TableCell>
                         <Box sx={{ display: 'flex', gap: 0.5 }}>
@@ -1256,33 +1195,6 @@ const EmergencyManagement: React.FC = () => {
         </DialogActions>
       </Dialog>
 
-      {/* Doctor Assignment Dialog */}
-      <Dialog open={openDoctorAssignDialog} onClose={() => setOpenDoctorAssignDialog(false)}>
-        <DialogTitle sx={{ fontWeight: 'bold' }}>Assign Doctor</DialogTitle>
-        <DialogContent>
-          <FormControl fullWidth sx={{ mt: 2 }}>
-            <InputLabel>Select Doctor</InputLabel>
-            <Select
-              value={selectedDoctor}
-              label="Select Doctor"
-              onChange={(e) => setSelectedDoctor(e.target.value)}
-            >
-              {doctors.map((doctor) => (
-                <MenuItem key={doctor._id} value={doctor._id}>
-                  Dr. {doctor.firstName} {doctor.lastName} - {doctor.specialization}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOpenDoctorAssignDialog(false)}>Cancel</Button>
-          <Button onClick={handleAssignDoctor} variant="contained" disabled={!selectedDoctor}>
-            Assign Doctor
-          </Button>
-        </DialogActions>
-      </Dialog>
-
       {/* Status Update Dialog */}
       <Dialog open={openStatusDialog} onClose={() => setOpenStatusDialog(false)}>
         <DialogTitle sx={{ fontWeight: 'bold' }}>Update Case Status</DialogTitle>
@@ -1457,14 +1369,6 @@ const EmergencyManagement: React.FC = () => {
                   </Typography>
                   <Divider sx={{ mb: 2 }} />
                   <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <Typography variant="body2" color="textSecondary">Assigned Doctor:</Typography>
-                      <Typography variant="body2" fontWeight="medium">
-                        {selectedCase.assignedDoctor 
-                          ? `Dr. ${selectedCase.assignedDoctor.firstName} ${selectedCase.assignedDoctor.lastName} (${selectedCase.assignedDoctor.specialization})`
-                          : 'Not assigned'}
-                      </Typography>
-                    </Box>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                       <Typography variant="body2" color="textSecondary">Assigned Nurse:</Typography>
                       <Typography variant="body2" fontWeight="medium">{selectedCase.assignedNurse || 'Not assigned'}</Typography>

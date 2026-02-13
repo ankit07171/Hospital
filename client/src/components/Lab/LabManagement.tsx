@@ -93,6 +93,7 @@ const LabManagement: React.FC = () => {
   const [patients, setPatients] = useState<Patient[]>([]);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [labReports, setLabReports] = useState<LabReport[]>([]);
+  const [medicalImagingRecords, setMedicalImagingRecords] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [error, setError] = useState('');
@@ -161,10 +162,16 @@ const LabManagement: React.FC = () => {
       setLoading(true);
       setError('');
       const response = await axios.get('/api/patients');
-      setPatients(response.data);
+      console.log('Patients API response:', response.data);
+      // Handle both array and object responses
+      const patientsData = response.data.patients || response.data;
+      const patientsArray = Array.isArray(patientsData) ? patientsData : [];
+      console.log('Patients array:', patientsArray.length, 'patients');
+      setPatients(patientsArray);
     } catch (error: any) {
       console.error('Failed to fetch patients:', error);
       setError('Failed to load patients');
+      setPatients([]); // Set empty array on error
     } finally {
       setLoading(false);
     }
@@ -175,10 +182,12 @@ const LabManagement: React.FC = () => {
       setLoading(true);
       const patientResponse = await axios.get(`/api/patients/${patientId}`);
       const labResponse = await axios.get(`/api/lab/patient/${patientId}`);
+      const imagingResponse = await axios.get(`/api/medical-imaging/patient/${patientId}`);
       
       const patient = patientResponse.data;
       setSelectedPatient(patient);
       setLabReports(labResponse.data);
+      setMedicalImagingRecords(imagingResponse.data || []);
       
       setMedicalForm({
         bloodGroup: patient.medicalInfo?.bloodGroup || '',
@@ -299,14 +308,17 @@ const LabManagement: React.FC = () => {
     setMedicalForm({ ...medicalForm, chronicConditions: newValue });
   };
 
-  const filteredPatients = useMemo(() =>
-    patients.filter(patient =>
-      patient.personalInfo.firstName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      patient.personalInfo.lastName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      patient.riskAssessment.riskLevel.toLowerCase().includes(searchTerm.toLowerCase())
-    ),
-    [patients, searchTerm]
-  );
+  const filteredPatients = useMemo(() => {
+    // Ensure patients is an array before filtering
+    if (!Array.isArray(patients)) {
+      return [];
+    }
+    return patients.filter(patient =>
+      patient.personalInfo?.firstName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      patient.personalInfo?.lastName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      patient.riskAssessment?.riskLevel?.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [patients, searchTerm]);
 
   const statusIcon = (s: string) =>
     s === 'Normal' ? <CheckCircle color="success" /> :
@@ -381,7 +393,26 @@ const LabManagement: React.FC = () => {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {filteredPatients.map((patient) => (
+                {loading ? (
+                  <TableRow>
+                    <TableCell colSpan={5} align="center" sx={{ py: 4 }}>
+                      <Typography>Loading patients...</Typography>
+                    </TableCell>
+                  </TableRow>
+                ) : filteredPatients.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} align="center" sx={{ py: 8 }}>
+                      <LocalHospital sx={{ fontSize: 64, color: 'action.disabled', mb: 2 }} />
+                      <Typography variant="h6" color="text.secondary" mb={1}>
+                        No patients found
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        {searchTerm ? 'Try adjusting your search' : 'Add patients from the Patient Management section'}
+                      </Typography>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredPatients.map((patient) => (
                   <TableRow 
                     key={patient._id} 
                     selected={selectedPatient?._id === patient._id}
@@ -434,7 +465,8 @@ const LabManagement: React.FC = () => {
                       </IconButton>
                     </TableCell>
                   </TableRow>
-                ))}
+                ))
+                )}
               </TableBody>
             </Table>
           </TableContainer>
@@ -627,6 +659,98 @@ const LabManagement: React.FC = () => {
               </TableContainer>
             </CardContent>
           </Card>
+
+          {/* MEDICAL IMAGING RESULTS */}
+          {medicalImagingRecords.length > 0 && (
+            <Card sx={{ mt: 4 }}>
+              <CardContent>
+                <Typography variant="h6" mb={3}>
+                  <LocalHospital sx={{ mr: 1, verticalAlign: 'middle' }} /> Medical Imaging Results ({medicalImagingRecords.length})
+                </Typography>
+                
+                <TableContainer>
+                  <Table>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Imaging Type</TableCell>
+                        <TableCell>Date</TableCell>
+                        <TableCell>Status</TableCell>
+                        <TableCell>Urgency</TableCell>
+                        <TableCell>Risk Score</TableCell>
+                        <TableCell>Summary</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {medicalImagingRecords.map((imaging) => (
+                        <TableRow key={imaging._id} hover>
+                          <TableCell>
+                            <Typography fontWeight="medium">{imaging.imagingType}</Typography>
+                            <Typography variant="body2" color="text.secondary">
+                              {imaging.imagingId}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>{new Date(imaging.createdAt).toLocaleDateString()}</TableCell>
+                          <TableCell>
+                            <Chip 
+                              label={imaging.status} 
+                              size="small"
+                              color={
+                                imaging.status === 'Completed' || imaging.status === 'Analyzed' ? 'success' :
+                                imaging.status === 'Processing' ? 'warning' : 'default'
+                              }
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Chip 
+                              label={imaging.aiAnalysis?.urgencyLevel || 'N/A'} 
+                              size="small"
+                              color={
+                                imaging.aiAnalysis?.urgencyLevel === 'Emergency' ? 'error' :
+                                imaging.aiAnalysis?.urgencyLevel === 'Urgent' ? 'warning' : 'success'
+                              }
+                            />
+                          </TableCell>
+                          <TableCell>
+                            {imaging.aiAnalysis?.riskScore ? (
+                              <Chip 
+                                label={`${imaging.aiAnalysis.riskScore}/100`}
+                                size="small"
+                                color={
+                                  imaging.aiAnalysis.riskScore >= 70 ? 'error' :
+                                  imaging.aiAnalysis.riskScore >= 40 ? 'warning' : 'success'
+                                }
+                              />
+                            ) : '—'}
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2" noWrap sx={{ maxWidth: 300 }}>
+                              {imaging.aiAnalysis?.summary || 'Processing...'}
+                            </Typography>
+                            {imaging.aiAnalysis?.detectedConditions && imaging.aiAnalysis.detectedConditions.length > 0 && (
+                              <Box sx={{ mt: 1 }}>
+                                {imaging.aiAnalysis.detectedConditions.slice(0, 2).map((condition: any, idx: number) => (
+                                  <Chip 
+                                    key={idx}
+                                    label={condition.condition}
+                                    size="small"
+                                    color={
+                                      condition.severity === 'Severe' || condition.severity === 'Critical' ? 'error' :
+                                      condition.severity === 'Moderate' ? 'warning' : 'info'
+                                    }
+                                    sx={{ mr: 0.5, mb: 0.5 }}
+                                  />
+                                ))}
+                              </Box>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </CardContent>
+            </Card>
+          )}
         </Box>
       )}
 

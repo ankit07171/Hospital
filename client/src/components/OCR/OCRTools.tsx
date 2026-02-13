@@ -94,6 +94,8 @@ const OCRTools: React.FC = () => {
   
   // Form state
   const [imagingType, setImagingType] = useState<string>('X-Ray');
+  const [selectedPatientId, setSelectedPatientId] = useState('');
+  const [patients, setPatients] = useState<any[]>([]);
   const [patientName, setPatientName] = useState('');
   const [patientAge, setPatientAge] = useState('');
   const [patientGender, setPatientGender] = useState('');
@@ -105,7 +107,18 @@ const OCRTools: React.FC = () => {
 
   useEffect(() => {
     fetchImagingRecords();
+    fetchPatients();
   }, []);
+
+  const fetchPatients = async () => {
+    try {
+      const response = await axios.get('/api/patients');
+      const patientsData = response.data.patients || response.data;
+      setPatients(Array.isArray(patientsData) ? patientsData : []);
+    } catch (error) {
+      console.error('Error fetching patients:', error);
+    }
+  };
 
   const fetchImagingRecords = async () => {
     try {
@@ -117,8 +130,8 @@ const OCRTools: React.FC = () => {
   };
 
   const processFile = async (file: File) => {
-    if (!patientName) {
-      alert('Please enter patient name');
+    if (!selectedPatientId) {
+      alert('Please select a patient');
       return;
     }
 
@@ -129,6 +142,7 @@ const OCRTools: React.FC = () => {
       const formData = new FormData();
       formData.append('file', file);
       formData.append('imagingType', imagingType);
+      formData.append('patientId', selectedPatientId);
       formData.append('patientName', patientName);
       formData.append('patientAge', patientAge);
       formData.append('patientGender', patientGender);
@@ -142,6 +156,7 @@ const OCRTools: React.FC = () => {
       setUploadResult(response.data);
       
       // Reset form
+      setSelectedPatientId('');
       setPatientName('');
       setPatientAge('');
       setPatientGender('');
@@ -269,7 +284,32 @@ const OCRTools: React.FC = () => {
                 <MenuItem value="X-Ray">X-Ray</MenuItem>
                 <MenuItem value="MRI">MRI</MenuItem>
                 <MenuItem value="CT Scan">CT Scan</MenuItem>
-                {/* <MenuItem value="Ultrasound">Ultrasound</MenuItem> */}
+              </Select>
+            </FormControl>
+
+            <FormControl fullWidth required>
+              <InputLabel>Select Patient</InputLabel>
+              <Select
+                value={selectedPatientId}
+                label="Select Patient"
+                onChange={(e) => {
+                  const patId = e.target.value;
+                  setSelectedPatientId(patId);
+                  // Auto-fill patient details
+                  const patient = patients.find(p => p._id === patId);
+                  if (patient) {
+                    setPatientName(`${patient.personalInfo.firstName} ${patient.personalInfo.lastName}`);
+                    setPatientAge(patient.age?.toString() || '');
+                    setPatientGender(patient.personalInfo.gender || '');
+                  }
+                }}
+              >
+                <MenuItem value="">Select a patient...</MenuItem>
+                {patients.map((patient) => (
+                  <MenuItem key={patient._id} value={patient._id}>
+                    {patient.personalInfo.firstName} {patient.personalInfo.lastName} - {patient.patientId}
+                  </MenuItem>
+                ))}
               </Select>
             </FormControl>
 
@@ -277,8 +317,8 @@ const OCRTools: React.FC = () => {
               fullWidth
               label="Patient Name"
               value={patientName}
-              onChange={(e) => setPatientName(e.target.value)}
-              required
+              disabled
+              helperText="Auto-filled from selected patient"
             />
 
             <TextField
@@ -286,7 +326,8 @@ const OCRTools: React.FC = () => {
               label="Patient Age"
               type="number"
               value={patientAge}
-              onChange={(e) => setPatientAge(e.target.value)}
+              disabled
+              helperText="Auto-filled from selected patient"
             />
 
             <FormControl fullWidth>
@@ -294,7 +335,7 @@ const OCRTools: React.FC = () => {
               <Select
                 value={patientGender}
                 label="Gender"
-                onChange={(e) => setPatientGender(e.target.value)}
+                disabled
               >
                 <MenuItem value="">Select</MenuItem>
                 <MenuItem value="Male">Male</MenuItem>

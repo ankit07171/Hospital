@@ -34,12 +34,23 @@ router.post('/upload', upload.single('file'), async (req, res) => {
       return res.status(400).json({ error: 'Imaging type is required' });
     }
 
+    if (!patientId) {
+      return res.status(400).json({ error: 'Patient ID is required' });
+    }
+
+    // Verify patient exists
+    const Patient = require('../models/Patient');
+    const patient = await Patient.findById(patientId);
+    if (!patient) {
+      return res.status(404).json({ error: 'Patient not found' });
+    }
+
     // Create initial medical imaging record
     const medicalImaging = new MedicalImaging({
-      patientId: patientId || null,
-      patientName: patientName || 'Unknown',
-      patientAge: patientAge || null,
-      patientGender: patientGender || 'Unknown',
+      patientId: patientId,
+      patientName: patientName || `${patient.personalInfo.firstName} ${patient.personalInfo.lastName}`,
+      patientAge: patientAge || patient.age,
+      patientGender: patientGender || patient.personalInfo.gender,
       imagingType,
       fileName: req.file.originalname,
       fileType: req.file.mimetype,
@@ -126,12 +137,26 @@ router.get('/', async (req, res) => {
 
     const imagingRecords = await MedicalImaging.find(filter)
       .sort({ createdAt: -1 })
-      .populate('patientId', 'name age gender patientId');
+      .populate('patientId', 'personalInfo.firstName personalInfo.lastName age personalInfo.gender patientId');
 
     res.json(imagingRecords);
   } catch (error) {
     console.error('Error fetching medical imaging records:', error);
     res.status(500).json({ error: 'Failed to fetch medical imaging records' });
+  }
+});
+
+// Get medical imaging records for a specific patient
+router.get('/patient/:patientId', async (req, res) => {
+  try {
+    const imagingRecords = await MedicalImaging.find({ patientId: req.params.patientId })
+      .sort({ createdAt: -1 })
+      .populate('patientId', 'personalInfo.firstName personalInfo.lastName age personalInfo.gender patientId');
+
+    res.json(imagingRecords);
+  } catch (error) {
+    console.error('Error fetching patient medical imaging records:', error);
+    res.status(500).json({ error: 'Failed to fetch patient medical imaging records' });
   }
 });
 

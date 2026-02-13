@@ -3,9 +3,9 @@ import {
   Box, Card, CardContent, Typography, Button, TextField, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, Paper, Chip, IconButton, Dialog, DialogTitle,
   DialogContent, DialogActions, Avatar, Pagination, InputAdornment, FormControl,
-  InputLabel, Select, MenuItem, IconButtonProps
+  InputLabel, Select, MenuItem, Alert
 } from '@mui/material';
-import { Add, Search, Edit, Visibility, Receipt, Person, Payment, Delete } from '@mui/icons-material';
+import { Add, Search, Edit, Visibility, Receipt, Person, Delete } from '@mui/icons-material';
 import { format } from 'date-fns';
 import axios from '../../api/axios';
 import debounce from 'lodash/debounce'; // npm i lodash @types/lodash
@@ -50,8 +50,12 @@ const BillingManagement: React.FC = () => {
   const [patientIdFilter, setPatientIdFilter] = useState(''); // Renamed for clarity
   const [selectedBill, setSelectedBill] = useState<Bill | null>(null);
   const [openGenerate, setOpenGenerate] = useState(false);
+  const [openEdit, setOpenEdit] = useState(false);
+  const [editingBill, setEditingBill] = useState<Bill | null>(null);
+  const [deleteDialog, setDeleteDialog] = useState<Bill | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
 
   // Generate Bill form state
   const [selectedPatientId, setSelectedPatientId] = useState('');
@@ -102,26 +106,19 @@ const BillingManagement: React.FC = () => {
   };
 
   const fetchPatients = async () => {
-  try {
-    // Try your existing patients endpoint first
-    let res = await axios.get('/api/patient');
-    setPatients(Array.isArray(res.data) ? res.data : [res.data]);
-  } catch (err: any) {
-    if (err.response?.status === 404) {
-      console.warn('Fallback: /api/patient 404 → Trying /api/patients');
-      try {
-        const res = await axios.get('/api/patients');
-        setPatients(Array.isArray(res.data) ? res.data : [res.data]);
-      } catch (fallbackErr) {
-        console.error('Both patient endpoints 404:', fallbackErr);
-        setPatients([]); // Empty dropdown graceful
-      }
-    } else {
+    try {
+      const res = await axios.get('/api/patients');
+      // Handle the response structure: { patients: [...], pagination: {...} }
+      const patientsData = res.data.patients || res.data;
+      const patientsArray = Array.isArray(patientsData) ? patientsData : [];
+      console.log('Fetched patients for billing:', patientsArray.length);
+      setPatients(patientsArray);
+    } catch (err: any) {
       console.error('Patients fetch error:', err);
+      setError('Failed to load patients');
       setPatients([]);
     }
-  }
-};
+  };
 
 
   // Generate Bill handlers
@@ -153,28 +150,110 @@ const BillingManagement: React.FC = () => {
 
   const handleCreateBill = async () => {
     if (!selectedPatientId || billItems.some(i => !i.name || i.unitPrice <= 0)) {
-      alert('Please select patient and fill all items');
+      setError('Please select patient and fill all items');
       return;
     }
+    
+    setLoading(true);
+    setError('');
+    
     try {
-      await axios.post('/api/billing', {
+      const response = await axios.post('/api/billing', {
         patientId: selectedPatientId,
         items: billItems,
         paidAmount,
       });
+      
+      console.log('Bill created:', response.data);
+      
       setOpenGenerate(false);
       setSelectedPatientId('');
       setBillItems([{ category: 'Bed', name: 'General Ward', quantity: 1, unitPrice: 1500, gstPercent: 5, total: 1575 }]);
       setPaidAmount(0);
-      fetchBills(); // Refresh list
+      setSuccess(`✅ Bill ${response.data.billId} created successfully!`);
+      
+      // Refresh list
+      await fetchBills();
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to create bill');
+      console.error('Bill creation error:', err);
+      setError(err.response?.data?.error || err.response?.data?.details || 'Failed to create bill');
+    } finally {
+      setLoading(false);
     }
   };
+
+  // Auto-hide success message
+  useEffect(() => {
+    if (success) {
+      const timer = setTimeout(() => setSuccess(''), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [success]);
 
   const handlePayment = async (billId: string) => {
     // Stub: POST /api/billing/${billId}/payments { amount: X, method: 'Cash' }
     console.log('Payment for', billId);
+  };
+
+  const handleDeleteBill = async () => {
+    if (!deleteDialog) return;
+    
+    setLoading(true);
+    setError('');
+    
+    try {
+      await axios.delete(`/api/billing/${deleteDialog._id}`);
+      
+      setDeleteDialog(null);
+      setSuccess(`✅ Bill ${deleteDialog.billId} deleted successfully!`);
+      
+      // Refresh list
+      await fetchBills();
+    } catch (err: any) {
+      console.error('Bill delete error:', err);
+      setError(err.response?.data?.error || 'Failed to delete bill');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEditBill = (bill: Bill) => {
+    setEditingBill(bill);
+    setSelectedPatientId(bill.patientId._id);
+    setBillItems(bill.items);
+    setPaidAmount(bill.summary.paidAmount);
+    setOpenEdit(true);
+  };
+
+  const handleUpdateBill = async () => {
+    if (!editingBill) return;
+    
+    setLoading(true);
+    setError('');
+    
+    try {
+      const response = await axios.put(`/api/billing/${editingBill._id}`, {
+        items: billItems,
+        paidAmount,
+      });
+      
+      console.log('Bill updated:', response.data);
+      
+      setOpenEdit(false);
+      setEditingBill(null);
+      setSelectedPatientId('');
+      setBillItems([{ category: 'Bed', name: 'General Ward', quantity: 1, unitPrice: 1500, gstPercent: 5, total: 1575 }]);
+      setPaidAmount(0);
+      setSuccess(`✅ Bill ${response.data.billId} updated successfully!`);
+      
+      // Refresh list
+      await fetchBills();
+    } catch (err: any) {
+      console.error('Bill update error:', err);
+      setError(err.response?.data?.error || 'Failed to update bill');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const patientName = (bill: Bill) => `${bill.patientId.personalInfo.firstName} ${bill.patientId.personalInfo.lastName}`;
@@ -185,9 +264,6 @@ const BillingManagement: React.FC = () => {
     return 'info';
   };
 
-  if (loading) return <Typography>Loading bills...</Typography>;
-  if (error) return <Typography color="error">{error}</Typography>;
-
   return (
     <Box sx={{ p: 3 }}>
       <Box display="flex" justifyContent="space-between" mb={3}>
@@ -196,6 +272,20 @@ const BillingManagement: React.FC = () => {
           Generate Bill
         </Button>
       </Box>
+
+      {/* Success Message */}
+      {success && (
+        <Alert severity="success" onClose={() => setSuccess('')} sx={{ mb: 3 }}>
+          {success}
+        </Alert>
+      )}
+
+      {/* Error Message */}
+      {error && (
+        <Alert severity="error" onClose={() => setError('')} sx={{ mb: 3 }}>
+          {error}
+        </Alert>
+      )}
 
       {/* Filters */}
       <Card sx={{ mb: 3 }}>
@@ -290,10 +380,20 @@ const BillingManagement: React.FC = () => {
                       {bill.summary.balanceAmount > 0 ? `₹${bill.summary.balanceAmount.toLocaleString()}` : 'Paid'}
                     </TableCell>
                     <TableCell>
-                      <IconButton onClick={() => setSelectedBill(bill)}><Visibility /></IconButton>
-                      {bill.summary.balanceAmount > 0 && (
-                        <IconButton color="success" onClick={() => handlePayment(bill._id)}><Payment /></IconButton>
-                      )}
+                      <IconButton onClick={() => setSelectedBill(bill)} size="small" title="View Details">
+                        <Visibility />
+                      </IconButton>
+                      <IconButton onClick={() => handleEditBill(bill)} size="small" color="primary" title="Edit Bill">
+                        <Edit />
+                      </IconButton>
+                      <IconButton 
+                        onClick={() => setDeleteDialog(bill)} 
+                        size="small" 
+                        color="error"
+                        title="Delete Bill"
+                      >
+                        <Delete />
+                      </IconButton>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -353,17 +453,27 @@ const BillingManagement: React.FC = () => {
       <Dialog open={openGenerate} onClose={() => setOpenGenerate(false)} maxWidth="md" fullWidth>
         <DialogTitle>Generate New Bill</DialogTitle>
         <DialogContent>
+          {error && (
+            <Box sx={{ mb: 2, p: 2, bgcolor: 'error.light', borderRadius: 1 }}>
+              <Typography color="error.contrastText">{error}</Typography>
+            </Box>
+          )}
+          
           <FormControl fullWidth sx={{ mb: 2 }} size="small">
             <InputLabel>Patient</InputLabel>
             <Select 
               value={selectedPatientId} 
               label="Patient"
               onChange={(e) => setSelectedPatientId(e.target.value as string)}
+              disabled={patients.length === 0}
             >
-              <MenuItem value="">Select Patient</MenuItem>
+              <MenuItem value="">
+                {patients.length === 0 ? 'No patients available' : 'Select Patient'}
+              </MenuItem>
               {patients.map(p => (
                 <MenuItem key={p._id} value={p._id}>
-                  {p.personalInfo?.firstName} {p.personalInfo?.lastName}
+                  {p.personalInfo?.firstName || 'Unknown'} {p.personalInfo?.lastName || ''} 
+                  {p.patientId ? ` (${p.patientId})` : ''}
                 </MenuItem>
               ))}
             </Select>
@@ -404,7 +514,102 @@ const BillingManagement: React.FC = () => {
         <DialogActions>
           <Button onClick={() => setOpenGenerate(false)}>Cancel</Button>
           <Button variant="contained" onClick={addItem} startIcon={<Add />}>Add Item</Button>
-          <Button variant="contained" onClick={handleCreateBill}>Create Bill</Button>
+          <Button 
+            variant="contained" 
+            onClick={handleCreateBill}
+            disabled={loading || !selectedPatientId}
+          >
+            {loading ? 'Creating...' : 'Create Bill'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Edit Bill Dialog */}
+      <Dialog open={openEdit} onClose={() => setOpenEdit(false)} maxWidth="md" fullWidth>
+        <DialogTitle>Edit Bill {editingBill?.billId}</DialogTitle>
+        <DialogContent>
+          {error && (
+            <Alert severity="error" onClose={() => setError('')} sx={{ mb: 2 }}>
+              {error}
+            </Alert>
+          )}
+          
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Patient: {editingBill && `${editingBill.patientId.personalInfo.firstName} ${editingBill.patientId.personalInfo.lastName}`}
+          </Typography>
+
+          {billItems.map((item, i) => (
+            <Box key={i} display="flex" gap={1} mb={2} flexWrap="wrap">
+              <TextField label="Category" size="small" select value={item.category} 
+                onChange={(e) => updateItem(i, 'category', e.target.value)} sx={{ minWidth: 100 }}
+              >
+                <MenuItem value="Bed">Bed</MenuItem>
+                <MenuItem value="Medicine">Medicine</MenuItem>
+                <MenuItem value="Service">Service</MenuItem>
+                <MenuItem value="Lab">Lab</MenuItem>
+              </TextField>
+              <TextField label="Name" size="small" value={item.name} onChange={(e) => updateItem(i, 'name', e.target.value)} sx={{ flex: 1, minWidth: 150 }} />
+              <TextField type="number" label="Qty" size="small" value={item.quantity} 
+                onChange={(e) => updateItem(i, 'quantity', +e.target.value)} sx={{ width: 80 }} />
+              <TextField type="number" label="Unit Price" size="small" value={item.unitPrice} 
+                onChange={(e) => updateItem(i, 'unitPrice', +e.target.value)} sx={{ width: 100 }} />
+              <TextField type="number" label="GST %" size="small" value={item.gstPercent} 
+                onChange={(e) => updateItem(i, 'gstPercent', +e.target.value)} sx={{ width: 80 }} />
+              <IconButton onClick={() => removeItem(i)}><Delete fontSize="small" /></IconButton>
+            </Box>
+          ))}
+
+          <Box mb={2} p={2} border="1px solid" borderColor="grey.300" borderRadius={1}>
+            <Typography>Subtotal: ₹{subTotal.toLocaleString()}</Typography>
+            <Typography>GST: ₹{gstAmount.toLocaleString()}</Typography>
+            <Typography fontWeight="bold">Total: ₹{totalAmount.toLocaleString()}</Typography>
+          </Box>
+
+          <TextField fullWidth label="Paid Amount" type="number" value={paidAmount}
+            onChange={(e) => setPaidAmount(+e.target.value)} size="small"
+            helperText={`Balance: ₹${(totalAmount - paidAmount).toLocaleString()}`}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenEdit(false)}>Cancel</Button>
+          <Button variant="contained" onClick={addItem} startIcon={<Add />}>Add Item</Button>
+          <Button 
+            variant="contained" 
+            onClick={handleUpdateBill}
+            disabled={loading}
+          >
+            {loading ? 'Updating...' : 'Update Bill'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={!!deleteDialog} onClose={() => setDeleteDialog(null)} maxWidth="sm">
+        <DialogTitle>Delete Bill?</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Are you sure you want to delete bill <strong>{deleteDialog?.billId}</strong>?
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            Patient: {deleteDialog && `${deleteDialog.patientId.personalInfo.firstName} ${deleteDialog.patientId.personalInfo.lastName}`}
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Amount: ₹{deleteDialog?.summary.totalAmount.toLocaleString()}
+          </Typography>
+          <Typography variant="body2" color="error.main" sx={{ mt: 2 }}>
+            This action cannot be undone.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteDialog(null)}>Cancel</Button>
+          <Button 
+            color="error" 
+            variant="contained"
+            onClick={handleDeleteBill}
+            disabled={loading}
+          >
+            {loading ? 'Deleting...' : 'Delete Bill'}
+          </Button>
         </DialogActions>
       </Dialog>
     </Box>
