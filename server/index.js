@@ -36,18 +36,33 @@ const io = socketIo(server, {
 });
 
 // Middleware
+// CORS Configuration - Allow frontend to access backend
+const allowedOrigins = [
+  'https://hospital-1-5hyf.onrender.com',
+  'http://localhost:3000',
+  'http://localhost:5000'
+];
+
 app.use(cors({
-  origin: process.env.NODE_ENV === 'production' 
-    ? [
-        process.env.FRONTEND_URL || 'https://hospital-1-5hyf.onrender.com',
-        'https://hospital-1-5hyf.onrender.com',
-        'https://lifeline-x-backend.onrender.com'
-      ]
-    : ['http://localhost:3000'],
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) === -1) {
+      const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+      return callback(new Error(msg), false);
+    }
+    return callback(null, true);
+  },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+  exposedHeaders: ['Content-Range', 'X-Content-Range'],
+  maxAge: 86400 // 24 hours
 }));
+
+// Handle preflight requests
+app.options('*', cors());
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
