@@ -24,16 +24,25 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIo(server, {
   cors: {
-    origin: "http://localhost:3000",
-    methods: ["GET", "POST"]
+    origin: process.env.NODE_ENV === 'production'
+      ? [
+          process.env.FRONTEND_URL || 'https://hospital-1-5hyf.onrender.com',
+          'https://hospital-1-5hyf.onrender.com'
+        ]
+      : ['http://localhost:3000'],
+    methods: ["GET", "POST"],
+    credentials: true
   }
 });
 
 // Middleware
-// app.use(cors());
 app.use(cors({
   origin: process.env.NODE_ENV === 'production' 
-    ? [process.env.FRONTEND_URL || 'https://your-frontend.onrender.com']
+    ? [
+        process.env.FRONTEND_URL || 'https://hospital-1-5hyf.onrender.com',
+        'https://hospital-1-5hyf.onrender.com',
+        'https://lifeline-x-backend.onrender.com'
+      ]
     : ['http://localhost:3000'],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
