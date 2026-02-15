@@ -217,7 +217,7 @@ const AppointmentList: React.FC = () => {
       console.error('Failed to fetch appointments:', error);
       alert('Failed to load appointments');
     }
-  }, [page, searchTerm]);
+  }, [searchTerm]);
 
   useEffect(() => {
     fetchAppointments();
