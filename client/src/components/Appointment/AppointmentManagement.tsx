@@ -3,7 +3,7 @@ import { Routes, Route, useNavigate, useParams } from 'react-router-dom';
 import {
   Box, Card, CardContent, Typography, Button, TextField, Table, TableBody,
   TableCell, TableContainer, TableHead, TableRow, Paper, Chip, IconButton,
-  Pagination, InputAdornment, FormControl, InputLabel, Select, MenuItem, 
+  InputAdornment, FormControl, InputLabel, Select, MenuItem, 
   FormHelperText
 } from '@mui/material';
 import { Add, Search, Edit, Visibility } from '@mui/icons-material';
@@ -205,16 +205,14 @@ const AppointmentList: React.FC = () => {
   const navigate = useNavigate();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
+  const [totalPages] = useState(1);
 
   const fetchAppointments = useCallback(async () => {
     try {
       const response = await axios.get('/api/appointments', {
-        params: { page, limit: 50, search: searchTerm } // Increased limit for sorting
+        params: { page: 1, limit: 50, search: searchTerm } // Increased limit for sorting
       });
       setAppointments(response.data.appointments || []);
-      setTotalPages(response.data.totalPages || 1);
     } catch (error) {
       console.error('Failed to fetch appointments:', error);
       alert('Failed to load appointments');

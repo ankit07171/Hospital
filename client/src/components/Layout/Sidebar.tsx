@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Drawer,
@@ -10,6 +10,7 @@ import {
   Divider,
   Tooltip,
   Box,
+  CircularProgress,
 } from '@mui/material';
 import {
   Dashboard,
@@ -22,6 +23,7 @@ import {
   CameraAlt,
   Emergency,
 } from '@mui/icons-material';
+import axios from '../../api/axios';
 
 interface SidebarProps {
   open: boolean;
@@ -58,6 +60,36 @@ const menuItems = [
 const Sidebar: React.FC<SidebarProps> = ({ open, onToggle }) => {
   const navigate = useNavigate();
   const location = useLocation();
+  const [stats, setStats] = useState({
+    patients: 0,
+    appointments: 0,
+    loading: true
+  });
+
+  useEffect(() => {
+    fetchStats();
+    // Refresh stats every 30 seconds
+    const interval = setInterval(fetchStats, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const fetchStats = async () => {
+    try {
+      const [patientsRes, appointmentsRes] = await Promise.all([
+        axios.get('/api/patients', { params: { limit: 1 } }),
+        axios.get('/api/appointments', { params: { limit: 1 } })
+      ]);
+
+      setStats({
+        patients: patientsRes.data.total || patientsRes.data.pagination?.total || 0,
+        appointments: appointmentsRes.data.total || appointmentsRes.data.pagination?.total || 0,
+        loading: false
+      });
+    } catch (error) {
+      console.error('Error fetching sidebar stats:', error);
+      setStats(prev => ({ ...prev, loading: false }));
+    }
+  };
 
   const handleNavigation = (path: string) => {
     navigate(path);
@@ -147,12 +179,18 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onToggle }) => {
               <Box sx={{ fontSize: '0.875rem', color: 'text.secondary', mb: 1 }}>
                 Today's Stats
               </Box>
-              <Box sx={{ fontSize: '1.25rem', fontWeight: 'bold', color: 'primary.main' }}>
-                127 Patients
-              </Box>
-              <Box sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
-                23 Appointments
-              </Box>
+              {stats.loading ? (
+                <CircularProgress size={24} sx={{ my: 2 }} />
+              ) : (
+                <>
+                  <Box sx={{ fontSize: '1.25rem', fontWeight: 'bold', color: 'primary.main' }}>
+                    {stats.patients} Patients
+                  </Box>
+                  <Box sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
+                    {stats.appointments} Appointments
+                  </Box>
+                </>
+              )}
             </Box>
           </Box>
         )}

@@ -69,7 +69,7 @@ const Navbar: React.FC<NavbarProps> = ({ onSidebarToggle }) => {
 
         <LocalHospital sx={{ mr: 2 }} />
         <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1, fontWeight: 600 }}>
-          Lifeline X HIS
+          Lifeline X 
         </Typography>
 
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>

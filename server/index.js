@@ -30,7 +30,13 @@ const io = socketIo(server, {
 });
 
 // Middleware
-app.use(cors());
+// app.use(cors());
+app.use(cors({
+  origin: process.env.NODE_ENV === 'production' 
+    ? ['https://your-app-name.vercel.app'] 
+    : ['http://localhost:3000'],
+  credentials: true
+}));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 

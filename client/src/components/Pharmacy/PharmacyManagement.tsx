@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Routes, Route } from 'react-router-dom';
 import {
   Box,
   Card,
@@ -47,20 +46,15 @@ import {
   Visibility,
   Delete,
   LocalPharmacy,
-  Person,
-  LocalHospital,
   Inventory,
   Warning,
-  CheckCircle,
   Assignment,
   Save,
-  Cancel,
-  TrendingUp,
   AttachMoney,
   DeleteOutline,
   Close,
 } from '@mui/icons-material';
-import { format, isToday, parseISO } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import axios from '../../api/axios';
 
 // ===== INTERFACES =====
@@ -228,6 +222,7 @@ const PharmacyManagement: React.FC = () => {
   // Fetch dashboard stats on mount
   useEffect(() => {
     fetchDashboardStats();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Auto-hide success message
