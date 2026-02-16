@@ -9,7 +9,8 @@ export default function Login() {
   const navigate = useNavigate();
 
   const handleLogin = async () => {
-    const res = await axios.post("http://localhost:5000/api/auth/login", {
+    const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+    const res = await axios.post(`${API_BASE_URL}/auth/login`, {
       email,
       password,
     });
