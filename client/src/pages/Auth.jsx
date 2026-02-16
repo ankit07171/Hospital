@@ -22,32 +22,31 @@ export default function Auth() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
-  const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
-  
   const handleSubmit = async () => {
-  setError("");
-  setLoading(true);
+    setError("");
+    setLoading(true);
 
-  try {
-    const url = mode === "signup"
-      ? `${API_BASE_URL}/auth/signup`
-      : `${API_BASE_URL}/auth/login`;
+    try {
+      const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+      const url = mode === "signup"
+        ? `${API_BASE_URL}/auth/signup`
+        : `${API_BASE_URL}/auth/login`;
 
-    const payload = mode === "signup"
-      ? form
-      : { email: form.email, password: form.password };
+      const payload = mode === "signup"
+        ? form
+        : { email: form.email, password: form.password };
 
-    const res = await axios.post(url, payload);
+      const res = await axios.post(url, payload);
 
-    localStorage.setItem("token", res.data.token);
-    localStorage.setItem("user", JSON.stringify(res.data.user));
-    navigate("/app/dashboard");
-  } catch (err) {
-    setError(err.response?.data?.error || "Something went wrong");
-  } finally {
-    setLoading(false);
-  }
-};
+      localStorage.setItem("token", res.data.token);
+      localStorage.setItem("user", JSON.stringify(res.data.user));
+      navigate("/app/dashboard");
+    } catch (err) {
+      setError(err.response?.data?.error || "Something went wrong");
+    } finally {
+      setLoading(false);
+    }
+  };
   // const handleSubmit = async () => {
   //   setError("");
   //   setLoading(true);

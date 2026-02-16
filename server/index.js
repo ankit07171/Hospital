@@ -36,32 +36,16 @@ const io = socketIo(server, {
 });
 
 // Middleware
-// CORS Configuration - Allow frontend to access backend
-const allowedOrigins = [
-  'https://hospital-1-5hyf.onrender.com',
-  'http://localhost:3000',
-  'http://localhost:5000'
-];
-
+// Simple CORS - Allow all origins in production (Render requirement)
 app.use(cors({
-  origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
-    
-    if (allowedOrigins.indexOf(origin) === -1) {
-      const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
-      return callback(new Error(msg), false);
-    }
-    return callback(null, true);
-  },
+  origin: true, // Allow all origins
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
-  exposedHeaders: ['Content-Range', 'X-Content-Range'],
-  maxAge: 86400 // 24 hours
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+  exposedHeaders: ['Content-Range', 'X-Content-Range']
 }));
 
-// Handle preflight requests
+// Explicit preflight handling
 app.options('*', cors());
 
 app.use(express.json({ limit: '50mb' }));
