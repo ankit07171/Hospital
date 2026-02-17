@@ -41,8 +41,10 @@ export default function Auth() {
       localStorage.setItem("token", res.data.token);
       localStorage.setItem("user", JSON.stringify(res.data.user));
       navigate("/app/dashboard");
-    } catch (err) {
-      setError(err.response?.data?.error || "Something went wrong");
+    } catch (err: any) {
+      const errorMessage = err.response?.data?.error || err.response?.data?.message || err.message || "Something went wrong. Please try again.";
+      setError(errorMessage);
+      console.error('Auth error:', err);
     } finally {
       setLoading(false);
     }

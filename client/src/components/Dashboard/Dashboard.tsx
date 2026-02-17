@@ -105,12 +105,12 @@ const Dashboard: React.FC = () => {
         emergencyResponse,
         billingResponse
       ] = await Promise.all([
-        axios.get('/api/analytics/dashboard'),
-        axios.get('/api/patients', { params: { limit: 5 } }),
-        axios.get('/api/appointments', { params: { limit: 10 } }),
-        axios.get('/api/lab', { params: { status: 'Pending', limit: 5 } }),
-        axios.get('/api/emergency', { params: { limit: 5 } }),
-        axios.get('/api/billing', { params: { limit: 5 } })
+        axios.get('/analytics/dashboard'),
+        axios.get('/patients', { params: { limit: 5 } }),
+        axios.get('/appointments', { params: { limit: 10 } }),
+        axios.get('/lab', { params: { status: 'Pending', limit: 5 } }),
+        axios.get('/emergency', { params: { limit: 5 } }),
+        axios.get('/billing', { params: { limit: 5 } })
       ]);
 
       // Update stats
