@@ -96,7 +96,7 @@ const Dashboard: React.FC = () => {
     try {
       setLoading(true);
       
-      // Fetch dashboard analytics
+      // Fetch dashboard analytics with better error handling
       const [
         analyticsResponse,
         patientsResponse,
@@ -105,12 +105,12 @@ const Dashboard: React.FC = () => {
         emergencyResponse,
         billingResponse
       ] = await Promise.all([
-        axios.get('/analytics/dashboard'),
-        axios.get('/patients', { params: { limit: 5 } }),
-        axios.get('/appointments', { params: { limit: 10 } }),
-        axios.get('/lab', { params: { status: 'Pending', limit: 5 } }),
-        axios.get('/emergency', { params: { limit: 5 } }),
-        axios.get('/billing', { params: { limit: 5 } })
+        axios.get('/analytics/dashboard').catch(err => ({ data: {} })),
+        axios.get('/patients', { params: { limit: 5 } }).catch(err => ({ data: { patients: [] } })),
+        axios.get('/appointments', { params: { limit: 10 } }).catch(err => ({ data: { appointments: [] } })),
+        axios.get('/lab', { params: { status: 'Pending', limit: 5 } }).catch(err => ({ data: { tests: [] } })),
+        axios.get('/emergency', { params: { limit: 5 } }).catch(err => ({ data: { emergencies: [] } })),
+        axios.get('/billing', { params: { limit: 5 } }).catch(err => ({ data: { bills: [] } }))
       ]);
 
       // Update stats
