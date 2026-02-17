@@ -4,6 +4,11 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const http = require('http');
 const socketIo = require('socket.io');
+const path = require('path');
+
+// Load environment variables - works for both local and Render
+dotenv.config();
+dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
 // Import routes
 const authRoutes = require('./routes/auth');
@@ -17,8 +22,6 @@ const analyticsRoutes = require('./routes/analytics');
 const ocrRoutes = require('./routes/ocr');
 const emergencyRoutes = require('./routes/emergency');
 const medicalImagingRoutes = require('./routes/medicalImaging');
-
-dotenv.config();
 
 const app = express();
 const server = http.createServer(app);
@@ -101,7 +104,6 @@ app.get('/', (req, res) => {
 
 app.get('/health', (req, res) => {
   res.json({ 
-    status: 'healthy',
     mongodb: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
     timestamp: new Date().toISOString()
   });
