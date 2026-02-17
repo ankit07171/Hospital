@@ -161,7 +161,7 @@ const LabManagement: React.FC = () => {
     try {
       setLoading(true);
       setError('');
-      const response = await axios.get('/api/patients');
+      const response = await axios.get('/patients');
       console.log('Patients API response:', response.data);
       // Handle both array and object responses
       const patientsData = response.data.patients || response.data;
@@ -236,9 +236,9 @@ const LabManagement: React.FC = () => {
       const labData = { patientId: selectedPatient._id, ...labForm };
       
       if (editingLab) {
-        await axios.put(`/api/lab/${editingLab._id}`, labData);
+        await axios.put(`/lab/${editingLab._id}`, labData);
       } else {
-        await axios.post('/api/lab', labData);
+        await axios.post('/lab', labData);
       }
 
       setLabDialogOpen(false);

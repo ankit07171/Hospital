@@ -237,7 +237,7 @@ const PharmacyManagement: React.FC = () => {
 
   const fetchDashboardStats = async () => {
     try {
-      const response = await axios.get('/api/pharmacy/dashboard-stats');
+      const response = await axios.get('/pharmacy/dashboard-stats');
       setDashboardStats(response.data);
     } catch (error: any) {
       console.error('Failed to fetch dashboard stats:', error);
@@ -248,7 +248,7 @@ const PharmacyManagement: React.FC = () => {
     setLoading(true);
     setError('');
     try {
-      const response = await axios.get('/api/pharmacy/medicines', {
+      const response = await axios.get('/pharmacy/medicines', {
         params: {
           page,
           limit: 10,
@@ -272,7 +272,7 @@ const PharmacyManagement: React.FC = () => {
     setLoading(true);
     setError('');
     try {
-      const response = await axios.get('/api/pharmacy/prescriptions', {
+      const response = await axios.get('/pharmacy/prescriptions', {
         params: {
           page,
           limit: 10,
@@ -338,7 +338,7 @@ const PharmacyManagement: React.FC = () => {
     if (!window.confirm(`Delete ${selectedIds.length} selected items?`)) return;
 
     try {
-      await axios.patch('/api/pharmacy/medicines/bulk-delete', { ids: selectedIds });
+      await axios.patch('/pharmacy/medicines/bulk-delete', { ids: selectedIds });
       setSuccess(`${selectedIds.length} items deleted successfully!`);
       setSelectedIds([]);
       fetchMedicines();
@@ -363,7 +363,7 @@ const PharmacyManagement: React.FC = () => {
           await axios.put(`/api/pharmacy/medicines/${editingItem._id}`, formData);
           setSuccess('Medicine updated successfully!');
         } else {
-          await axios.post('/api/pharmacy/medicines', formData);
+          await axios.post('/pharmacy/medicines', formData);
           setSuccess('Medicine created successfully!');
         }
         fetchMedicines();
@@ -372,7 +372,7 @@ const PharmacyManagement: React.FC = () => {
           await axios.put(`/api/pharmacy/prescriptions/${editingItem._id}`, formData);
           setSuccess('Prescription updated successfully!');
         } else {
-          await axios.post('/api/pharmacy/prescriptions', formData);
+          await axios.post('/pharmacy/prescriptions', formData);
           setSuccess('Prescription created successfully!');
         }
         fetchPrescriptions();

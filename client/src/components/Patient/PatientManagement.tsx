@@ -90,7 +90,7 @@ const Patients: React.FC = () => {
       if (riskLevelFilter) params.riskLevel = riskLevelFilter;
       if (searchTerm) params.search = searchTerm;
 
-      const response = await axios.get('/api/patients', { params });
+      const response = await axios.get('/patients', { params });
       
       // ✅ FIX: Extract patients array from response object
       const patientsData = response.data.patients || response.data;

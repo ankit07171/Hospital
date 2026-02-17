@@ -76,8 +76,8 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onToggle }) => {
   const fetchStats = async () => {
     try {
       const [patientsRes, appointmentsRes] = await Promise.all([
-        axios.get('/api/patients', { params: { limit: 1 } }),
-        axios.get('/api/appointments', { params: { limit: 1 } })
+        axios.get('/patients', { params: { limit: 1 } }),
+        axios.get('/appointments', { params: { limit: 1 } })
       ]);
 
       setStats({

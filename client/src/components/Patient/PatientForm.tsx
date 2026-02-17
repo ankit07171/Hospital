@@ -116,7 +116,7 @@ const PatientForm: React.FC = () => {
         await axios.put(`/api/patients/${id}`, formData);
         setSuccess('Patient updated successfully!');
       } else {
-        await axios.post('/api/patients', formData);
+        await axios.post('/patients', formData);
         setSuccess('Patient created successfully!');
       }
       setTimeout(() => navigate('/app/patients'), 1500);

@@ -87,7 +87,7 @@ const BillingManagement: React.FC = () => {
     setLoading(true);
     setError('');
     try {
-      const res = await axios.get('/api/billing', {
+      const res = await axios.get('/billing', {
         params: {
           page, limit: 10, search,
           status: statusFilter !== 'All' ? statusFilter : undefined,
@@ -107,7 +107,7 @@ const BillingManagement: React.FC = () => {
 
   const fetchPatients = async () => {
     try {
-      const res = await axios.get('/api/patients');
+      const res = await axios.get('/patients');
       // Handle the response structure: { patients: [...], pagination: {...} }
       const patientsData = res.data.patients || res.data;
       const patientsArray = Array.isArray(patientsData) ? patientsData : [];
@@ -158,7 +158,7 @@ const BillingManagement: React.FC = () => {
     setError('');
     
     try {
-      const response = await axios.post('/api/billing', {
+      const response = await axios.post('/billing', {
         patientId: selectedPatientId,
         items: billItems,
         paidAmount,

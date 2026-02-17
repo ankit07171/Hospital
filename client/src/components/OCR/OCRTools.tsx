@@ -112,7 +112,7 @@ const OCRTools: React.FC = () => {
 
   const fetchPatients = async () => {
     try {
-      const response = await axios.get('/api/patients');
+      const response = await axios.get('/patients');
       const patientsData = response.data.patients || response.data;
       setPatients(Array.isArray(patientsData) ? patientsData : []);
     } catch (error) {
@@ -122,7 +122,7 @@ const OCRTools: React.FC = () => {
 
   const fetchImagingRecords = async () => {
     try {
-      const response = await axios.get('/api/medical-imaging');
+      const response = await axios.get('/medical-imaging');
       setImagingRecords(response.data);
     } catch (error) {
       console.error('Error fetching imaging records:', error);
@@ -147,7 +147,7 @@ const OCRTools: React.FC = () => {
       formData.append('patientAge', patientAge);
       formData.append('patientGender', patientGender);
 
-      const response = await axios.post('/api/medical-imaging/upload', formData, {
+      const response = await axios.post('/medical-imaging/upload', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },

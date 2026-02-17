@@ -184,7 +184,7 @@ const DoctorForm: React.FC = () => {
         await axios.put(`/api/doctors/${id}`, formData);
         setSuccess('Doctor updated successfully!');
       } else {
-        await axios.post('/api/doctors', formData);
+        await axios.post('/doctors', formData);
         setSuccess('Doctor created successfully!');
       }
       

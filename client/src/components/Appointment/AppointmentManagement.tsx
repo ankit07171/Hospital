@@ -80,7 +80,7 @@ const AppointmentForm: React.FC = () => {
         await axios.put(`/api/appointments/${id}`, formData);
         alert('✅ Appointment updated successfully!');
       } else {
-        await axios.post('/api/appointments', formData);
+        await axios.post('/appointments', formData);
         alert('✅ Appointment created successfully!');
       }
       setTimeout(() => navigate('/app/appointments'), 1500);
@@ -209,7 +209,7 @@ const AppointmentList: React.FC = () => {
 
   const fetchAppointments = useCallback(async () => {
     try {
-      const response = await axios.get('/api/appointments', {
+      const response = await axios.get('/appointments', {
         params: { page: 1, limit: 50, search: searchTerm } // Increased limit for sorting
       });
       setAppointments(response.data.appointments || []);

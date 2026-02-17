@@ -214,7 +214,7 @@ const EmergencyManagement: React.FC = () => {
 
   const fetchCases = async () => {
     try {
-      const response = await axios.get('/api/emergency', {
+      const response = await axios.get('/emergency', {
         params: {
           search: searchTerm,
           status: statusFilter,
@@ -233,7 +233,7 @@ const EmergencyManagement: React.FC = () => {
 
   const fetchStats = async () => {
     try {
-      const response = await axios.get('/api/emergency/stats/overview');
+      const response = await axios.get('/emergency/stats/overview');
       setStats(response.data);
     } catch (error) {
       console.error('Error fetching emergency stats:', error);
@@ -242,7 +242,7 @@ const EmergencyManagement: React.FC = () => {
 
   const fetchPatients = async () => {
     try {
-      const response = await axios.get('/api/patients');
+      const response = await axios.get('/patients');
       // ✅ Handle paginated response
       const patientsData = response.data.patients || response.data;
       setPatients(Array.isArray(patientsData) ? patientsData : []);
@@ -287,7 +287,7 @@ const EmergencyManagement: React.FC = () => {
         await axios.put(`/api/emergency/${selectedCase._id}`, payload);
         showSnackbar('Emergency case updated successfully', 'success');
       } else {
-        await axios.post('/api/emergency', payload);
+        await axios.post('/emergency', payload);
         showSnackbar('Emergency case created successfully', 'success');
       }
       setOpenDialog(false);
